@@ -1,0 +1,250 @@
+JewelCart API Endpoint Use Case Log
+==================================
+Generated from the backend route handlers in the current workspace.
+
+1) GET /health
+Use case: Check backend health status.
+Input: No body. No query parameters.
+Output: 200 OK
+{
+  "status": "ok",
+  "service": "jewelcart-backend"
+}
+
+2) GET /products
+Use case: Retrieve the product catalog.
+Input: No body. Optional auth context from local user claims.
+Output: 200 OK
+{
+  "items": [
+    {
+      "id": "prod-001",
+      "title": "Ruby Heart Pendant",
+      "msrp": 1299,
+      "is_b2b_only": false,
+      "track_type": "UNIQUE",
+      "createdAt": "2024-01-15T00:00:00.000Z"
+    }
+  ]
+}
+
+3) GET /products/{productId}
+Use case: Fetch a single product by ID.
+Input: Path parameter productId = prod-001
+Output: 200 OK
+{
+  "id": "prod-001",
+  "title": "Ruby Heart Pendant",
+  "msrp": 1299,
+  "is_b2b_only": false,
+  "track_type": "UNIQUE",
+  "createdAt": "2024-01-15T00:00:00.000Z"
+}
+
+4) POST /products
+Use case: Create a new product (admin only).
+Input:
+{
+  "title": "Emerald Ring",
+  "msrp": 1899,
+  "is_b2b_only": false,
+  "track_type": "UNIQUE",
+  "tiers": [
+    { "org_rating": 3, "min_qty": 5, "custom_price": 1699 }
+  ]
+}
+Output: 201 Created
+{
+  "productId": "<generated-id>",
+  "metadata": {
+    "PK": "PRODUCT#<generated-id>",
+    "SK": "METADATA",
+    "id": "<generated-id>",
+    "title": "Emerald Ring",
+    "msrp": 1899,
+    "is_b2b_only": false,
+    "track_type": "UNIQUE"
+  },
+  "tiers": [
+    {
+      "PK": "PRODUCT#<generated-id>",
+      "SK": "TIER#3",
+      "min_qty": 5,
+      "custom_price": 1699
+    }
+  ]
+}
+
+5) GET /cart
+Use case: Retrieve the signed-in user's cart items.
+Input: Authenticated user context.
+Output: 200 OK
+{
+  "items": [
+    {
+      "PK": "CART#local-user-001",
+      "SK": "ITEM#prod-001",
+      "product_id": "prod-001",
+      "quantity": 2,
+      "msrp": 1299,
+      "title": "Ruby Heart Pendant"
+    }
+  ]
+}
+
+6) POST /cart/items
+Use case: Add a product to the cart.
+Input:
+{
+  "product_id": "prod-001",
+  "quantity": 2
+}
+Output: 201 Created
+{
+  "PK": "CART#local-user-001",
+  "SK": "ITEM#prod-001",
+  "product_id": "prod-001",
+  "quantity": 2,
+  "msrp": 1299,
+  "title": "Ruby Heart Pendant",
+  "createdAt": "<timestamp>"
+}
+
+7) POST /cart/bulk-import
+Use case: Import multiple cart items for an organization.
+Input:
+{
+  "items": [
+    { "product_id": "prod-001", "quantity": 3, "msrp": 1299, "title": "Ruby Heart Pendant" },
+    { "product_id": "prod-003", "quantity": 1, "msrp": 799, "title": "Pearl Stud Earrings" }
+  ]
+}
+Output: 201 Created
+{
+  "imported": 2
+}
+
+8) GET /orders
+Use case: List orders for the current user or business.
+Input: Authenticated user context.
+Output: 200 OK
+{
+  "orders": [
+    {
+      "PK": "USER#local-user-001",
+      "SK": "METADATA",
+      "orderId": "ord-123",
+      "totalAmount": 2598,
+      "orderStatus": "PENDING_PAYMENT"
+    }
+  ]
+}
+
+9) GET /orders/{orderId}
+Use case: Fetch a specific order.
+Input: Path parameter orderId = ord-123
+Output: 200 OK
+{
+  "PK": "ORDER#ord-123",
+  "SK": "METADATA",
+  "orderId": "ord-123",
+  "totalAmount": 2598,
+  "orderStatus": "PENDING_PAYMENT",
+  "ownerId": "local-user-001"
+}
+
+10) POST /orders
+Use case: Place an order from the current cart.
+Input:
+{
+  "orderId": "ord-123"
+}
+Output: 201 Created
+{
+  "order": {
+    "PK": "ORDER#ord-123",
+    "SK": "METADATA",
+    "orderId": "ord-123",
+    "totalAmount": 2598,
+    "orderStatus": "PENDING_PAYMENT",
+    "ownerId": "local-user-001",
+    "businessId": null
+  },
+  "corporateIndex": null
+}
+
+11) GET /inventory/{productId}
+Use case: Check stock details for a product.
+Input: Path parameter productId = prod-001
+Output: 200 OK
+{
+  "PK": "INVENTORY#prod-001",
+  "SK": "STOCK",
+  "product_id": "prod-001",
+  "available_quantity": 10,
+  "reservation_status": "AVAILABLE"
+}
+
+12) PATCH /inventory/reserve
+Use case: Reserve inventory for a product.
+Input:
+{
+  "product_id": "prod-001",
+  "requested_quantity": 2,
+  "track_type": "UNIQUE"
+}
+Output: 200 OK
+{
+  "PK": "INVENTORY#prod-001",
+  "SK": "STOCK",
+  "product_id": "prod-001",
+  "available_quantity": 10,
+  "reservation_status": "RESERVED",
+  "reservation_ttl": "<timestamp>"
+}
+
+13) POST /payments/intent
+Use case: Create a payment intent for an existing order.
+Input:
+{
+  "order_id": "ord-123"
+}
+Output: 201 Created
+{
+  "orderId": "ord-123",
+  "amount": 2598,
+  "currency": "USD",
+  "client_secret": "pi_test_ord-123_secret"
+}
+
+14) POST /payments/po-verify
+Use case: Verify a purchase order for a business account.
+Input:
+{
+  "order_id": "ord-123",
+  "credit_safety_margin": 0.1
+}
+Output: 200 OK
+{
+  "orderId": "ord-123",
+  "status": "PAID"
+}
+
+15) POST /payments/webhook
+Use case: Receive payment success webhook events.
+Input:
+{
+  "event": "payment_intent.succeeded",
+  "order_id": "ord-123"
+}
+Output: 200 OK
+{
+  "received": true
+}
+
+Common error cases
+-----------------
+- Missing or invalid input returns 400/422 depending on the endpoint.
+- Unauthorized requests return 403.
+- Missing resources return 404.
+- Duplicate or conflicting requests can return 409.

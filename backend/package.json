@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Production-ready serverless backend for JewelCart",
   "dependencies": {
+    "dotenv": "^17.4.2",
     "mongodb": "^6.9.0"
   }
 }

@@ -3,32 +3,45 @@ import { MongoClient } from "mongodb";
 
 let mongoClient = null;
 let collection = null;
-
 export const getCollection = async () => {
-  if (collection) {
+  console.log("getCollection called");
+
+  const uri = process.env.MONGODB_URI;
+  const dbName = process.env.MONGODB_DB_NAME;
+  const collName = process.env.MONGODB_COLLECTION_NAME;
+
+  console.log({
+    uriExists: !!uri,
+    dbName,
+    collName,
+  });
+
+  try {
+    if (!mongoClient) {
+      console.log("Creating MongoClient");
+
+      mongoClient = new MongoClient(uri, {
+        maxPoolSize: 10,
+        serverSelectionTimeoutMS: 5000,
+      });
+
+      console.log("Connecting...");
+      await mongoClient.connect();
+      console.log("Connected successfully");
+    }
+
+    const db = mongoClient.db(dbName);
+    collection = db.collection(collName);
+
     return collection;
+  } catch (err) {
+    console.error("Mongo connection failed:", err);
+
+    mongoClient = null;
+    collection = null;
+
+    throw err;
   }
-
-  const uri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017";
-  const dbName = process.env.MONGODB_DB_NAME || "jewelcart";
-  const collName = process.env.MONGODB_COLLECTION_NAME || "jewelcart_single";
-
-  if (!mongoClient) {
-    mongoClient = new MongoClient(uri, {
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000,
-    });
-    await mongoClient.connect();
-  }
-
-  const db = mongoClient.db(dbName);
-  collection = db.collection(collName);
-
-  await collection.createIndex({ PK: 1, SK: 1 }, { unique: true, name: "pk_sk_unique" });
-  await collection.createIndex({ PK: 1 }, { name: "pk_index" });
-  await collection.createIndex({ SK: 1 }, { name: "sk_index" });
-
-  return collection;
 };
 
 export const extractUserContext = (event) => {
