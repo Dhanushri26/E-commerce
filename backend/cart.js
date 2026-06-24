@@ -7,7 +7,7 @@ import {
 } from "./shared.js";
 
 const getCartPartition = (userContext) => {
-  if (userContext.isOrganization && userContext.businessId) {
+  if (userContext.isBusiness && userContext.businessId) {
     return `CART#${userContext.businessId}`;
   }
   return `CART#${userContext.userId}`;
@@ -29,7 +29,7 @@ export const handler = async (event) => {
       const enrichedItems = [];
 
       for (const item of items) {
-        if (userContext.isOrganization || userContext.isAdmin) {
+        if (userContext.isBusiness || userContext.isAdmin) {
           const matchingProduct = await coll.findOne({ PK: `PRODUCT#${item.product_id}`, SK: "METADATA" }, { projection: { _id: 0 } });
           const tierDocs = await coll.find({ PK: `PRODUCT#${item.product_id}`, SK: { $regex: /^TIER#/ } }, { projection: { _id: 0 } }).toArray();
           const applicableTier = tierDocs
@@ -92,7 +92,7 @@ export const handler = async (event) => {
     }
 
     if (method === "POST" && path === "/cart/bulk-import") {
-      if (!userContext.isOrganization && !userContext.isAdmin) {
+      if (!userContext.isBusiness && !userContext.isAdmin) {
         return createErrorResponse(403, "Only organizations or admins may use bulk import");
       }
 

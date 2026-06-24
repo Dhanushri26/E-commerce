@@ -40,7 +40,7 @@ export const handler = async (event) => {
     }
 
     if (method === "POST" && path === "/payments/po-verify") {
-      if (!userContext.isOrganization && !userContext.isAdmin) {
+      if (!userContext.isBusiness && !userContext.isAdmin) {
         return createErrorResponse(403, "Only organizations or admins can verify purchase orders");
       }
 

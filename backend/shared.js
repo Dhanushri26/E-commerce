@@ -69,6 +69,28 @@ const getHeaderValue = (event, headerNames) => {
   return null;
 };
 
+const deriveRoles = (groups = []) => {
+  const normalizedGroups = groups
+    .map((group) => String(group).trim())
+    .filter(Boolean);
+
+  const isAdmin = normalizedGroups.includes(ROLES.ADMIN);
+
+  const isBusiness = normalizedGroups.includes(ROLES.BUSINESS);
+
+  const isCustomer =
+    normalizedGroups.includes(ROLES.CUSTOMER) ||
+    (!isAdmin && !isBusiness);
+
+  return {
+    groups: normalizedGroups,
+    isAdmin,
+    isBusiness,
+    isCustomer,
+  };
+};
+
+
 export const extractUserContext = (event) => {
   const claims = event?.requestContext?.authorizer?.jwt?.claims || {};
   const roleHeader = getHeaderValue(event, ["x-role", "x-user-role"]);
@@ -80,10 +102,12 @@ export const extractUserContext = (event) => {
       .filter(Boolean);
 
     const isAdmin = normalizedGroups.includes("Admin");
-    const isOrganization = normalizedGroups.includes("Organization");
+    const isBusiness =
+      normalizedGroups.includes("Business") ||
+      normalizedGroups.includes("Organization");
     const isCustomer =
       normalizedGroups.includes("Customer") ||
-      (!isAdmin && !isOrganization);
+      (!isAdmin && !isBusiness);
 
     return {
       userId: claims.sub || claims.username || "local-user",
@@ -91,10 +115,11 @@ export const extractUserContext = (event) => {
       businessId:
         claims["custom:business_id"] ||
         claims.business_id ||
+        getHeaderValue(event, ["x-business-id"]) ||
         null,
       isAuthenticated: true,
       isAdmin,
-      isOrganization,
+      isBusiness,
       isCustomer,
       taxExempt:
         claims["custom:tax_exempt"] === "true" ||
@@ -114,7 +139,7 @@ export const extractUserContext = (event) => {
       businessId: null,
       isAuthenticated: true,
       isAdmin: false,
-      isOrganization: false,
+      isBusiness: false,
       isCustomer: true,
       taxExempt: false,
       creditLimit: 0,
@@ -134,10 +159,12 @@ export const extractUserContext = (event) => {
   );
 
   const isAdmin = normalizedGroups.includes("Admin");
-  const isOrganization = normalizedGroups.includes("Organization");
+  const isBusiness =
+    normalizedGroups.includes("Business") ||
+    normalizedGroups.includes("Organization");
   const isCustomer =
     normalizedGroups.includes("Customer") ||
-    (!isAdmin && !isOrganization);
+    (!isAdmin && !isBusiness);
 
   return {
     userId: claims.sub || claims.username || "anonymous",
@@ -149,7 +176,7 @@ export const extractUserContext = (event) => {
     isAuthenticated:
       Boolean(claims.sub || claims.username),
     isAdmin,
-    isOrganization,
+    isBusiness,
     isCustomer,
     taxExempt:
       claims["custom:tax_exempt"] === "true" ||
@@ -251,3 +278,58 @@ export const createErrorResponse = (statusCode, message, details = null) =>
     error: message,
     ...(details ? { details } : {}),
   });
+
+  export const ROLES = {
+    ADMIN: "Admin",
+    BUSINESS: "Business",
+    CUSTOMER: "Customer",
+  };
+  
+  export const ENTITY_TYPES = {
+    PRODUCT: "PRODUCT",
+    CUSTOMER: "CUSTOMER",
+    CART: "CART",
+    ORDER: "ORDER",
+    PAYMENT: "PAYMENT",
+  };
+  
+  export const generateId = () => randomUUID();
+  
+  export const createAuditFields = (userId) => ({
+    createdBy: userId,
+    updatedBy: userId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  
+  export const updateAuditFields = (userId) => ({
+    updatedBy: userId,
+    updatedAt: new Date(),
+  });
+
+
+
+  export const hasRole = (context, role) => {
+    switch (role) {
+      case ROLES.ADMIN:
+        return context?.isAdmin;
+  
+      case ROLES.BUSINESS:
+        return context?.isBusiness;
+  
+      case ROLES.CUSTOMER:
+        return context?.isCustomer;
+  
+      default:
+        return false;
+    }
+  };
+  
+  export const authorize = (
+    context,
+    allowedRoles = []
+  ) => {
+    return allowedRoles.some((role) =>
+      hasRole(context, role)
+    );
+  };

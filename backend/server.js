@@ -1,11 +1,15 @@
 import http from "node:http";
 import dotenv from "dotenv";
+import { randomUUID } from "node:crypto";
 
 import { handler as productsHandler } from "./products.js";
 import { handler as inventoryHandler } from "./inventory.js";
 import { handler as cartHandler } from "./cart.js";
 import { handler as ordersHandler } from "./orders.js";
 import { handler as paymentsHandler } from "./payments.js";
+import { handler as customersHandler } from "./customers.js";
+
+
 dotenv.config();
 const PORT = Number(process.env.PORT || 3000);
 const HANDLERS = [
@@ -14,6 +18,7 @@ const HANDLERS = [
   { prefix: "/cart", handler: cartHandler },
   { prefix: "/orders", handler: ordersHandler },
   { prefix: "/payments", handler: paymentsHandler },
+  { prefix: "/customers", handler: customersHandler },
 ];
 
 const parseBody = async (req) => {
@@ -48,6 +53,17 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "*",
+      "Access-Control-Allow-Methods":
+        "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    });
+  
+    return res.end();
+  }
+
   const matchedHandler = HANDLERS.find((entry) => path.startsWith(entry.prefix));
   if (!matchedHandler) {
     res.writeHead(404, { "Content-Type": "application/json" });
@@ -55,6 +71,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  const role =
+  req.headers["x-role"] ||
+  "Customer";
   const body = await parseBody(req);
   const event = {
     httpMethod: req.method,
@@ -70,17 +89,24 @@ const server = http.createServer(async (req, res) => {
       claims: {
         sub: "local-user-001",
         username: "local-user",
-        "cognito:groups": "Customer"
+        "cognito:groups": role
       },
     },
   },
 },
+requestId: randomUUID(),
+requestTime: new Date().toISOString(),
   };
 
   try {
     const response = await matchedHandler.handler(event);
-    res.writeHead(response.statusCode || 200, { "Content-Type": "application/json" });
-    res.end(response.body || JSON.stringify(response));
+    const headers = {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      ...(response.headers || {}),
+    };
+    res.writeHead(response.statusCode || 200, headers);
+    res.end(typeof response.body === "string" ? response.body : JSON.stringify(response.body ?? response));
   } catch (error) {
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: error.message }));

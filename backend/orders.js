@@ -12,7 +12,7 @@ import {
 } from "./shared.js";
 
 const getOrderOwnerPartition = (userContext) => {
-  if (userContext.isOrganization && userContext.businessId) {
+  if (userContext.isBusiness && userContext.businessId) {
     return `BUSINESS#${userContext.businessId}`;
   }
   return `USER#${userContext.userId}`;
@@ -71,14 +71,14 @@ export const handler = async (event) => {
       try {
         const body = parseJsonBody(event);
         const coll = await getCollection();
-        const cartItems = await coll.find({ PK: `CART#${userContext.isOrganization && userContext.businessId ? userContext.businessId : userContext.userId}` }).project({ _id: 0 }).toArray();
+        const cartItems = await coll.find({ PK: `CART#${userContext.isBusiness && userContext.businessId ? userContext.businessId : userContext.userId}` }).project({ _id: 0 }).toArray();
         if (cartItems.length === 0) {
           return createErrorResponse(422, "Cart is empty");
         }
 
         const totalAmount = cartItems.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.msrp || 0), 0);
         const orderId = body.orderId || randomUUID();
-        const orderStatus = userContext.isOrganization && userContext.creditLimit > 0 && totalAmount > userContext.creditLimit
+        const orderStatus = userContext.isBusiness && userContext.creditLimit > 0 && totalAmount > userContext.creditLimit
           ? "PENDING_MANAGEMENT_APPROVAL"
           : "PENDING_PAYMENT";
 
@@ -93,7 +93,7 @@ export const handler = async (event) => {
           createdAt: new Date(),
         };
 
-        const corporateIndexDoc = userContext.isOrganization && userContext.businessId
+        const corporateIndexDoc = userContext.isBusiness && userContext.businessId
           ? {
               PK: `BUSINESS#${userContext.businessId}`,
               SK: `ORDER#${orderId}`,
@@ -110,7 +110,7 @@ export const handler = async (event) => {
             if (corporateIndexDoc) {
               await coll.insertOne(corporateIndexDoc, { session });
             }
-            await coll.deleteMany({ PK: `CART#${userContext.isOrganization && userContext.businessId ? userContext.businessId : userContext.userId}` }, { session });
+            await coll.deleteMany({ PK: `CART#${userContext.isBusiness && userContext.businessId ? userContext.businessId : userContext.userId}` }, { session });
           });
         } finally {
           await session.endSession();
