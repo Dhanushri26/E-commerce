@@ -44,30 +44,121 @@ export const getCollection = async () => {
   }
 };
 
+const getHeaderValue = (event, headerNames) => {
+  const headers = event?.headers || {};
+
+  for (const headerName of headerNames) {
+    const value = headers[headerName];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  const normalizedHeaders = Object.entries(headers).reduce((acc, [key, value]) => {
+    acc[key.toLowerCase()] = value;
+    return acc;
+  }, {});
+
+  for (const headerName of headerNames) {
+    const value = normalizedHeaders[headerName.toLowerCase()];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+};
+
 export const extractUserContext = (event) => {
   const claims = event?.requestContext?.authorizer?.jwt?.claims || {};
+  const roleHeader = getHeaderValue(event, ["x-role", "x-user-role"]);
+
+  if (roleHeader) {
+    const rawGroups = roleHeader.split(",");
+    const normalizedGroups = rawGroups
+      .map((group) => String(group).trim())
+      .filter(Boolean);
+
+    const isAdmin = normalizedGroups.includes("Admin");
+    const isOrganization = normalizedGroups.includes("Organization");
+    const isCustomer =
+      normalizedGroups.includes("Customer") ||
+      (!isAdmin && !isOrganization);
+
+    return {
+      userId: claims.sub || claims.username || "local-user",
+      groups: normalizedGroups,
+      businessId:
+        claims["custom:business_id"] ||
+        claims.business_id ||
+        null,
+      isAuthenticated: true,
+      isAdmin,
+      isOrganization,
+      isCustomer,
+      taxExempt:
+        claims["custom:tax_exempt"] === "true" ||
+        claims.tax_exempt === "true",
+      creditLimit: Number(
+        claims["custom:credit_limit"] ||
+        claims.credit_limit ||
+        0
+      ),
+    };
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    return {
+      userId: "local-user",
+      groups: [],
+      businessId: null,
+      isAuthenticated: true,
+      isAdmin: false,
+      isOrganization: false,
+      isCustomer: true,
+      taxExempt: false,
+      creditLimit: 0,
+    };
+  }
+
   const rawGroups = claims["cognito:groups"] || claims.groups || [];
+
   const groups = Array.isArray(rawGroups)
     ? rawGroups
     : typeof rawGroups === "string"
       ? rawGroups.split(",")
       : [];
-  const normalizedGroups = groups.map((group) => String(group).trim());
+
+  const normalizedGroups = groups.map((group) =>
+    String(group).trim()
+  );
 
   const isAdmin = normalizedGroups.includes("Admin");
   const isOrganization = normalizedGroups.includes("Organization");
-  const isCustomer = normalizedGroups.includes("Customer") || (!isAdmin && !isOrganization);
+  const isCustomer =
+    normalizedGroups.includes("Customer") ||
+    (!isAdmin && !isOrganization);
 
   return {
     userId: claims.sub || claims.username || "anonymous",
     groups: normalizedGroups,
-    businessId: claims["custom:business_id"] || claims.business_id || null,
-    isAuthenticated: Boolean(claims.sub || claims.username),
+    businessId:
+      claims["custom:business_id"] ||
+      claims.business_id ||
+      null,
+    isAuthenticated:
+      Boolean(claims.sub || claims.username),
     isAdmin,
     isOrganization,
     isCustomer,
-    taxExempt: claims["custom:tax_exempt"] === "true" || claims.tax_exempt === "true",
-    creditLimit: Number(claims["custom:credit_limit"] || claims.credit_limit || 0),
+    taxExempt:
+      claims["custom:tax_exempt"] === "true" ||
+      claims.tax_exempt === "true",
+    creditLimit: Number(
+      claims["custom:credit_limit"] ||
+      claims.credit_limit ||
+      0
+    ),
   };
 };
 

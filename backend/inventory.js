@@ -13,6 +13,21 @@ export const handler = async (event) => {
     const path = event?.rawPath || event?.path || "";
     const userContext = extractUserContext(event);
 
+    if (method === "GET" && (path === "/inventory" || path === "/inventory/")) {
+      const coll = await getCollection();
+      const inventoryItems = await coll.find({ SK: "STOCK" }, { projection: { _id: 0 } }).toArray();
+      const uniqueProductIds = new Set(
+        inventoryItems
+          .map((item) => item.product_id || item.PK?.replace(/^INVENTORY#/, ""))
+          .filter(Boolean)
+      );
+
+      return buildResponse(200, {
+        totalProducts: uniqueProductIds.size,
+        items: inventoryItems,
+      });
+    }
+
     if (method === "GET" && path.startsWith("/inventory/")) {
       const productId = getPathParam(event, 1);
       if (!productId) {
@@ -50,13 +65,26 @@ export const handler = async (event) => {
       const inventoryPk = `INVENTORY#${productId}`;
       const reservationTtl = new Date(Date.now() + 15 * 60 * 1000);
 
+      const existingInventory = await coll.findOne({ PK: inventoryPk, SK: "STOCK" }, { projection: { _id: 0 } });
+      if (!existingInventory) {
+        return createErrorResponse(404, "Inventory not found");
+      }
+
+      const hasActiveReservation = existingInventory.reservation_status === "RESERVED"
+        && existingInventory.reservation_ttl
+        && new Date(existingInventory.reservation_ttl) > new Date();
+      if (hasActiveReservation) {
+        return createErrorResponse(409, "Inventory is already reserved");
+      }
+
       if (trackType === "UNIQUE") {
+        const availableQuantity = Number(existingInventory.available_quantity ?? 1);
+        if (Number.isFinite(availableQuantity) && availableQuantity <= 0) {
+          return createErrorResponse(409, "Insufficient inventory available");
+        }
+
         const result = await coll.updateOne(
-          {
-            PK: inventoryPk,
-            SK: "STOCK",
-            reservation_status: "AVAILABLE",
-          },
+          { PK: inventoryPk, SK: "STOCK" },
           {
             $set: {
               reservation_status: "RESERVED",
@@ -66,10 +94,19 @@ export const handler = async (event) => {
           }
         );
 
+        if (result.matchedCount === 0) {
+          return createErrorResponse(404, "Inventory not found");
+        }
+
         if (result.modifiedCount === 0) {
           return createErrorResponse(409, "Inventory could not be reserved");
         }
       } else {
+        const availableQuantity = Number(existingInventory.available_quantity ?? 0);
+        if (!Number.isFinite(availableQuantity) || availableQuantity < requestedQuantity) {
+          return createErrorResponse(409, "Insufficient inventory available");
+        }
+
         const result = await coll.updateOne(
           {
             PK: inventoryPk,
@@ -86,8 +123,12 @@ export const handler = async (event) => {
           }
         );
 
-        if (result.modifiedCount === 0) {
+        if (result.matchedCount === 0) {
           return createErrorResponse(409, "Insufficient inventory available");
+        }
+
+        if (result.modifiedCount === 0) {
+          return createErrorResponse(409, "Inventory could not be reserved");
         }
       }
 

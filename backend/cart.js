@@ -92,8 +92,8 @@ export const handler = async (event) => {
     }
 
     if (method === "POST" && path === "/cart/bulk-import") {
-      if (!userContext.isOrganization) {
-        return createErrorResponse(403, "Only organizations may use bulk import");
+      if (!userContext.isOrganization && !userContext.isAdmin) {
+        return createErrorResponse(403, "Only organizations or admins may use bulk import");
       }
 
       const body = parseJsonBody(event);

@@ -40,8 +40,8 @@ export const handler = async (event) => {
     }
 
     if (method === "POST" && path === "/payments/po-verify") {
-      if (!userContext.isOrganization) {
-        return createErrorResponse(403, "Only organizations can verify purchase orders");
+      if (!userContext.isOrganization && !userContext.isAdmin) {
+        return createErrorResponse(403, "Only organizations or admins can verify purchase orders");
       }
 
       const body = parseJsonBody(event);
@@ -56,8 +56,14 @@ export const handler = async (event) => {
         return createErrorResponse(404, "Order not found");
       }
 
-      const safetyMargin = Number(body.credit_safety_margin || 0.1);
-      const allowed = Number(order.totalAmount) <= Number(userContext.creditLimit) * (1 - safetyMargin);
+      const rawSafetyMargin = body.credit_safety_margin ?? body.creditSafetyMargin ?? 0.1;
+      const safetyMargin = Number(rawSafetyMargin);
+      if (!Number.isFinite(safetyMargin) || safetyMargin < 0 || safetyMargin >= 1) {
+        return createErrorResponse(422, "credit_safety_margin must be a number between 0 and 1");
+      }
+
+      const creditLimit = Number.isFinite(Number(userContext.creditLimit)) ? Number(userContext.creditLimit) : 0;
+      const allowed = Number(order.totalAmount) <= creditLimit * (1 - safetyMargin);
       if (!allowed) {
         return createErrorResponse(422, "Purchase order exceeds credit safety margin");
       }
