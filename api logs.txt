@@ -1,6 +1,6 @@
 JewelCart API Endpoint Use Case Log
 ==================================
-Generated from the backend route handlers in the current workspace.
+Generated from the current backend route handlers for the cart, orders, inventory, payments, and product services.
 
 1) GET /health
 Use case: Check backend health status.
@@ -13,16 +13,16 @@ Output: 200 OK
 
 2) GET /products
 Use case: Retrieve the product catalog.
-Input: No body. Optional auth context from local user claims.
+Input: Optional auth context.
 Output: 200 OK
 {
   "items": [
     {
-      "id": "prod-001",
+      "productId": "prod-001",
       "title": "Ruby Heart Pendant",
       "msrp": 1299,
-      "is_b2b_only": false,
-      "track_type": "UNIQUE",
+      "isB2BOnly": false,
+      "isActive": true,
       "createdAt": "2024-01-15T00:00:00.000Z"
     }
   ]
@@ -33,11 +33,11 @@ Use case: Fetch a single product by ID.
 Input: Path parameter productId = prod-001
 Output: 200 OK
 {
-  "id": "prod-001",
+  "productId": "prod-001",
   "title": "Ruby Heart Pendant",
   "msrp": 1299,
-  "is_b2b_only": false,
-  "track_type": "UNIQUE",
+  "isB2BOnly": false,
+  "isActive": true,
   "createdAt": "2024-01-15T00:00:00.000Z"
 }
 
@@ -47,200 +47,373 @@ Input:
 {
   "title": "Emerald Ring",
   "msrp": 1899,
-  "is_b2b_only": false,
-  "track_type": "UNIQUE",
-  "tiers": [
-    { "org_rating": 3, "min_qty": 5, "custom_price": 1699 }
-  ]
+  "isB2BOnly": false,
+  "isActive": true,
+  "trackType": "UNIQUE"
 }
 Output: 201 Created
 {
   "productId": "<generated-id>",
-  "metadata": {
-    "PK": "PRODUCT#<generated-id>",
-    "SK": "METADATA",
-    "id": "<generated-id>",
-    "title": "Emerald Ring",
-    "msrp": 1899,
-    "is_b2b_only": false,
-    "track_type": "UNIQUE"
-  },
-  "tiers": [
-    {
-      "PK": "PRODUCT#<generated-id>",
-      "SK": "TIER#3",
-      "min_qty": 5,
-      "custom_price": 1699
-    }
-  ]
+  "title": "Emerald Ring",
+  "msrp": 1899,
+  "isB2BOnly": false,
+  "isActive": true
 }
 
 5) GET /cart
-Use case: Retrieve the signed-in user's cart items.
-Input: Authenticated user context.
+Use case: Retrieve the authenticated user's cart items.
+Input: Authenticated user or business context.
 Output: 200 OK
 {
+  "cartId": "CART#local-user",
   "items": [
     {
-      "PK": "CART#local-user-001",
-      "SK": "ITEM#prod-001",
-      "product_id": "prod-001",
+      "cartId": "CART#local-user",
+      "productId": "prod-001",
+      "productTitle": "Ruby Heart Pendant",
+      "productSku": "SKU-001",
       "quantity": 2,
-      "msrp": 1299,
-      "title": "Ruby Heart Pendant"
+      "unitPrice": 1299,
+      "subtotal": 2598,
+      "ownerId": "local-user",
+      "businessId": null
     }
   ]
 }
 
-6) POST /cart/items
-Use case: Add a product to the cart.
+6) GET /cart/summary
+Use case: Get cart totals for the active cart.
+Input: Authenticated user or business context.
+Output: 200 OK
+{
+  "cartId": "CART#local-user",
+  "itemCount": 2,
+  "subtotal": 2598,
+  "estimatedTax": 207.84,
+  "grandTotal": 2805.84
+}
+
+7) POST /cart/items
+Use case: Add or increase a product quantity in the cart.
 Input:
 {
-  "product_id": "prod-001",
+  "productId": "prod-001",
   "quantity": 2
 }
 Output: 201 Created
 {
-  "PK": "CART#local-user-001",
-  "SK": "ITEM#prod-001",
-  "product_id": "prod-001",
+  "cartId": "CART#local-user",
+  "productId": "prod-001",
+  "productTitle": "Ruby Heart Pendant",
+  "productSku": "SKU-001",
   "quantity": 2,
-  "msrp": 1299,
-  "title": "Ruby Heart Pendant",
-  "createdAt": "<timestamp>"
+  "unitPrice": 1299,
+  "subtotal": 2598,
+  "ownerId": "local-user",
+  "businessId": null
 }
 
-7) POST /cart/bulk-import
-Use case: Import multiple cart items for an organization.
+8) PUT /cart/items/{productId}
+Use case: Update the quantity of a cart item.
+Input:
+{
+  "quantity": 4
+}
+Output: 200 OK
+{
+  "cartId": "CART#local-user",
+  "productId": "prod-001",
+  "quantity": 4,
+  "unitPrice": 1299,
+  "subtotal": 5196
+}
+
+9) DELETE /cart/items/{productId}
+Use case: Remove one item from the current cart.
+Input: Path parameter productId = prod-001
+Output: 200 OK
+{
+  "message": "Cart item removed"
+}
+
+10) DELETE /cart/clear
+Use case: Clear all active cart items for the current owner.
+Input: No body.
+Output: 200 OK
+{
+  "message": "Cart cleared"
+}
+
+11) POST /cart/bulk-import
+Use case: Import multiple items for a business or admin account using upsert semantics.
 Input:
 {
   "items": [
-    { "product_id": "prod-001", "quantity": 3, "msrp": 1299, "title": "Ruby Heart Pendant" },
-    { "product_id": "prod-003", "quantity": 1, "msrp": 799, "title": "Pearl Stud Earrings" }
+    { "productId": "prod-001", "quantity": 3 },
+    { "productId": "prod-002", "quantity": 1 }
   ]
 }
 Output: 201 Created
 {
-  "imported": 2
+  "imported": 2,
+  "cartId": "CART#business-001"
 }
 
-8) GET /orders
+12) GET /orders
 Use case: List orders for the current user or business.
 Input: Authenticated user context.
 Output: 200 OK
 {
   "orders": [
     {
-      "PK": "USER#local-user-001",
-      "SK": "METADATA",
       "orderId": "ord-123",
       "totalAmount": 2598,
-      "orderStatus": "PENDING_PAYMENT"
+      "orderStatus": "PENDING_PAYMENT",
+      "paymentStatus": "PENDING"
     }
   ]
 }
 
-9) GET /orders/{orderId}
+13) GET /orders/{orderId}
 Use case: Fetch a specific order.
 Input: Path parameter orderId = ord-123
 Output: 200 OK
 {
-  "PK": "ORDER#ord-123",
-  "SK": "METADATA",
   "orderId": "ord-123",
   "totalAmount": 2598,
   "orderStatus": "PENDING_PAYMENT",
-  "ownerId": "local-user-001"
+  "paymentStatus": "PENDING",
+  "ownerId": "local-user"
 }
 
-10) POST /orders
+14) POST /orders
 Use case: Place an order from the current cart.
+Input:
+{
+  "orderId": "ord-123",
+  "notes": "Gift wrap"
+}
+Output: 201 Created
+{
+  "order": {
+    "orderId": "ord-123",
+    "totalAmount": 2598,
+    "orderStatus": "PENDING_PAYMENT",
+    "paymentStatus": "PENDING",
+    "ownerId": "local-user",
+    "businessId": null
+  },
+  "userOrderIndex": {
+    "PK": "USER#local-user",
+    "SK": "ORDER#ord-123"
+  },
+  "businessOrderIndex": null
+}
+
+15) PUT /orders/{orderId}/cancel
+Use case: Cancel an order before it progresses too far.
+Input: Path parameter orderId = ord-123
+Output: 200 OK
+{
+  "order": {
+    "orderId": "ord-123",
+    "orderStatus": "CANCELLED"
+  }
+}
+
+16) GET /inventory
+Use case: List inventory records.
+Input: Authenticated user context.
+Output: 200 OK
+{
+  "totalProducts": 3,
+  "items": [
+    {
+      "productId": "prod-001",
+      "availableQuantity": 10,
+      "reservedQuantity": 0,
+      "inventoryStatus": "AVAILABLE"
+    }
+  ]
+}
+
+17) GET /inventory/{productId}
+Use case: Check stock details for a product.
+Input: Path parameter productId = prod-001
+Output: 200 OK
+{
+  "productId": "prod-001",
+  "availableQuantity": 10,
+  "reservedQuantity": 0,
+  "inventoryStatus": "AVAILABLE"
+}
+
+18) POST /inventory
+Use case: Create inventory entries for a product (admin only).
+Input:
+{
+  "productId": "prod-001",
+  "availableQuantity": 10,
+  "reservedQuantity": 0,
+  "damagedQuantity": 0,
+  "reorderThreshold": 2,
+  "inventoryStatus": "AVAILABLE"
+}
+Output: 201 Created
+{
+  "productId": "prod-001",
+  "availableQuantity": 10,
+  "reservedQuantity": 0,
+  "inventoryStatus": "AVAILABLE"
+}
+
+19) PATCH /inventory/reserve
+Use case: Reserve inventory for a product.
+Input:
+{
+  "productId": "prod-001",
+  "requestedQuantity": 2
+}
+Output: 200 OK
+{
+  "productId": "prod-001",
+  "availableQuantity": 8,
+  "reservedQuantity": 2,
+  "reservationStatus": "RESERVED"
+}
+
+20) POST /payments
+Use case: Create a payment record for an order.
+Input:
+{
+  "orderId": "ord-123",
+  "amount": 2598,
+  "currency": "USD",
+  "paymentMethod": "CARD"
+}
+Output: 201 Created
+{
+  "paymentId": "<generated-id>",
+  "orderId": "ord-123",
+  "amount": 2598,
+  "currency": "USD",
+  "paymentStatus": "PENDING"
+}
+
+21) GET /payments
+Use case: List payments visible to the current user or business.
+Input: Authenticated user context.
+Output: 200 OK
+{
+  "payments": [
+    {
+      "paymentId": "pay-001",
+      "orderId": "ord-123",
+      "amount": 2598,
+      "paymentStatus": "PENDING"
+    }
+  ]
+}
+
+22) POST /payments/intent
+Use case: Create a payment intent for an existing order.
 Input:
 {
   "orderId": "ord-123"
 }
 Output: 201 Created
 {
-  "order": {
-    "PK": "ORDER#ord-123",
-    "SK": "METADATA",
-    "orderId": "ord-123",
-    "totalAmount": 2598,
-    "orderStatus": "PENDING_PAYMENT",
-    "ownerId": "local-user-001",
-    "businessId": null
-  },
-  "corporateIndex": null
-}
-
-11) GET /inventory/{productId}
-Use case: Check stock details for a product.
-Input: Path parameter productId = prod-001
-Output: 200 OK
-{
-  "PK": "INVENTORY#prod-001",
-  "SK": "STOCK",
-  "product_id": "prod-001",
-  "available_quantity": 10,
-  "reservation_status": "AVAILABLE"
-}
-
-12) PATCH /inventory/reserve
-Use case: Reserve inventory for a product.
-Input:
-{
-  "product_id": "prod-001",
-  "requested_quantity": 2,
-  "track_type": "UNIQUE"
-}
-Output: 200 OK
-{
-  "PK": "INVENTORY#prod-001",
-  "SK": "STOCK",
-  "product_id": "prod-001",
-  "available_quantity": 10,
-  "reservation_status": "RESERVED",
-  "reservation_ttl": "<timestamp>"
-}
-
-13) POST /payments/intent
-Use case: Create a payment intent for an existing order.
-Input:
-{
-  "order_id": "ord-123"
-}
-Output: 201 Created
-{
+  "paymentId": "<generated-id>",
   "orderId": "ord-123",
   "amount": 2598,
   "currency": "USD",
-  "client_secret": "pi_test_ord-123_secret"
+  "paymentStatus": "PENDING",
+  "clientSecret": "pi_test_ord-123_secret"
 }
 
-14) POST /payments/po-verify
-Use case: Verify a purchase order for a business account.
+23) POST /payments/verify
+Use case: Mark a payment as verified.
 Input:
 {
-  "order_id": "ord-123",
-  "credit_safety_margin": 0.1
+  "orderId": "ord-123",
+  "paymentStatus": "AUTHORIZED"
 }
 Output: 200 OK
 {
   "orderId": "ord-123",
-  "status": "PAID"
+  "paymentStatus": "AUTHORIZED"
 }
 
-15) POST /payments/webhook
-Use case: Receive payment success webhook events.
+24) POST /payments/capture
+Use case: Capture an authorized payment (admin only).
+Input:
+{
+  "paymentId": "pay-001"
+}
+Output: 200 OK
+{
+  "paymentId": "pay-001",
+  "paymentStatus": "CAPTURED"
+}
+
+25) POST /payments/refund
+Use case: Refund a captured payment (admin only).
+Input:
+{
+  "paymentId": "pay-001",
+  "refundAmount": 500
+}
+Output: 200 OK
+{
+  "paymentId": "pay-001",
+  "paymentStatus": "REFUNDED",
+  "refundAmount": 500
+}
+
+26) POST /payments/cancel
+Use case: Cancel an existing payment (admin only).
+Input:
+{
+  "paymentId": "pay-001"
+}
+Output: 200 OK
+{
+  "paymentId": "pay-001",
+  "paymentStatus": "CANCELLED"
+}
+
+27) POST /payments/po-verify
+Use case: Verify a purchase order for a business account.
+Input:
+{
+  "orderId": "ord-123",
+  "creditSafetyMargin": 0.1
+}
+Output: 200 OK
+{
+  "orderId": "ord-123",
+  "paymentStatus": "PAID"
+}
+
+28) POST /payments/webhook
+Use case: Receive provider webhook events.
 Input:
 {
   "event": "payment_intent.succeeded",
-  "order_id": "ord-123"
+  "orderId": "ord-123",
+  "source": "stripe"
 }
 Output: 200 OK
 {
   "received": true
 }
+
+Verified use-case checks
+------------------------
+- GET /cart without authentication returns 403 as expected.
+- POST /cart/items with missing productId or quantity returns 422 as expected.
+- POST /payments/intent without authentication returns 403 as expected.
+- GET /inventory without authentication still resolves through the handler and returns an access-control response based on role context.
 
 Common error cases
 -----------------

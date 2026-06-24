@@ -69,18 +69,16 @@ const getHeaderValue = (event, headerNames) => {
   return null;
 };
 
+const normalizeRoleName = (value) => String(value || "").trim().toLowerCase();
+
 const deriveRoles = (groups = []) => {
   const normalizedGroups = groups
     .map((group) => String(group).trim())
     .filter(Boolean);
 
-  const isAdmin = normalizedGroups.includes(ROLES.ADMIN);
-
-  const isBusiness = normalizedGroups.includes(ROLES.BUSINESS);
-
-  const isCustomer =
-    normalizedGroups.includes(ROLES.CUSTOMER) ||
-    (!isAdmin && !isBusiness);
+  const isAdmin = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.ADMIN));
+  const isBusiness = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.BUSINESS));
+  const isCustomer = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.CUSTOMER)) || (!isAdmin && !isBusiness);
 
   return {
     groups: normalizedGroups,
@@ -101,13 +99,9 @@ export const extractUserContext = (event) => {
       .map((group) => String(group).trim())
       .filter(Boolean);
 
-    const isAdmin = normalizedGroups.includes("Admin");
-    const isBusiness =
-      normalizedGroups.includes("Business") ||
-      normalizedGroups.includes("Organization");
-    const isCustomer =
-      normalizedGroups.includes("Customer") ||
-      (!isAdmin && !isBusiness);
+    const isAdmin = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.ADMIN));
+    const isBusiness = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.BUSINESS));
+    const isCustomer = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.CUSTOMER)) || (!isAdmin && !isBusiness);
 
     return {
       userId: claims.sub || claims.username || "local-user",
@@ -158,13 +152,9 @@ export const extractUserContext = (event) => {
     String(group).trim()
   );
 
-  const isAdmin = normalizedGroups.includes("Admin");
-  const isBusiness =
-    normalizedGroups.includes("Business") ||
-    normalizedGroups.includes("Organization");
-  const isCustomer =
-    normalizedGroups.includes("Customer") ||
-    (!isAdmin && !isBusiness);
+  const isAdmin = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.ADMIN));
+  const isBusiness = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.BUSINESS));
+  const isCustomer = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.CUSTOMER)) || (!isAdmin && !isBusiness);
 
   return {
     userId: claims.sub || claims.username || "anonymous",
@@ -279,7 +269,32 @@ export const createErrorResponse = (statusCode, message, details = null) =>
     ...(details ? { details } : {}),
   });
 
-  export const ROLES = {
+  export const ORDER_STATUS = Object.freeze({
+  PENDING_PAYMENT: "PENDING_PAYMENT",
+  PENDING_MANAGEMENT_APPROVAL: "PENDING_MANAGEMENT_APPROVAL",
+  PROCESSING: "PROCESSING",
+  SHIPPED: "SHIPPED",
+  DELIVERED: "DELIVERED",
+  CANCELLED: "CANCELLED",
+  REFUNDED: "REFUNDED",
+});
+
+export const ORDER_SOURCES = Object.freeze({
+  B2C: "B2C",
+  B2B: "B2B",
+});
+
+export const PAYMENT_STATUS = Object.freeze({
+  PENDING: "PENDING",
+  AUTHORIZED: "AUTHORIZED",
+  CAPTURED: "CAPTURED",
+  PAID: "PAID",
+  FAILED: "FAILED",
+  REFUNDED: "REFUNDED",
+  CANCELLED: "CANCELLED",
+});
+
+export const ROLES = {
     ADMIN: "Admin",
     BUSINESS: "Business",
     CUSTOMER: "Customer",
