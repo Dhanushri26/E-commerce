@@ -18,6 +18,7 @@ const activeInventoryFilter = (extra = {}) => ({
 });
 
 const normalizeQuantity = (value) => Number(value ?? 0);
+const DEFAULT_INITIAL_INVENTORY_QUANTITY = 10;
 
 const readInventoryByProduct = async (coll, productId) => {
   if (!productId) {
@@ -34,6 +35,48 @@ const buildInventoryResponse = (inventory) => ({
   damagedQuantity: Number(inventory?.damagedQuantity ?? inventory?.damaged_quantity ?? 0),
   reorderThreshold: Number(inventory?.reorderThreshold ?? inventory?.reorder_threshold ?? 0),
 });
+
+export const buildInventoryDocument = (productId, body = {}, userContext = {}) => {
+  const availableQuantity = normalizeQuantity(
+    body.availableQuantity ?? body.available_quantity ?? body.initialInventoryQuantity ?? body.initial_inventory_quantity ?? DEFAULT_INITIAL_INVENTORY_QUANTITY
+  );
+
+  return {
+    PK: `INVENTORY#${productId}`,
+    SK: "STOCK",
+    inventoryId: body.inventoryId || randomUUID(),
+    productId,
+    availableQuantity,
+    reservedQuantity: normalizeQuantity(body.reservedQuantity ?? body.reserved_quantity ?? 0),
+    damagedQuantity: normalizeQuantity(body.damagedQuantity ?? body.damaged_quantity ?? 0),
+    reorderThreshold: normalizeQuantity(body.reorderThreshold ?? body.reorder_threshold ?? 0),
+    warehouseId: body.warehouseId || null,
+    inventoryStatus: body.inventoryStatus || (availableQuantity > 0 ? "AVAILABLE" : "OUT_OF_STOCK"),
+    isDeleted: false,
+    deletedAt: null,
+    deletedBy: null,
+    reservationStatus: "AVAILABLE",
+    reservationTTL: null,
+    reservedBy: null,
+    reservedAt: null,
+    ...createAuditFields(userContext.userId || "system"),
+  };
+};
+
+export const ensureInventoryForProduct = async (coll, productId, body = {}, userContext = {}) => {
+  if (!productId) {
+    return null;
+  }
+
+  const existingInventory = await readInventoryByProduct(coll, productId);
+  if (existingInventory) {
+    return existingInventory;
+  }
+
+  const inventoryDoc = buildInventoryDocument(productId, body, userContext);
+  await coll.insertOne(inventoryDoc);
+  return inventoryDoc;
+};
 
 const canManageInventory = (userContext) => userContext.isAdmin;
 const canReserveInventory = (userContext) => userContext.isAdmin || userContext.isBusiness;
@@ -168,27 +211,7 @@ export const handler = async (event) => {
         return createErrorResponse(409, "Inventory already exists for this product");
       }
 
-      const inventoryId = body.inventoryId || randomUUID();
-      const inventoryDoc = {
-        PK: `INVENTORY#${productId}`,
-        SK: "STOCK",
-        inventoryId,
-        productId,
-        availableQuantity: normalizeQuantity(body.availableQuantity ?? body.available_quantity),
-        reservedQuantity: normalizeQuantity(body.reservedQuantity ?? body.reserved_quantity),
-        damagedQuantity: normalizeQuantity(body.damagedQuantity ?? body.damaged_quantity),
-        reorderThreshold: normalizeQuantity(body.reorderThreshold ?? body.reorder_threshold),
-        warehouseId: body.warehouseId || null,
-        inventoryStatus: body.inventoryStatus || "AVAILABLE",
-        isDeleted: false,
-        deletedAt: null,
-        deletedBy: null,
-        reservationStatus: "AVAILABLE",
-        reservationTTL: null,
-        reservedBy: null,
-        reservedAt: null,
-        ...createAuditFields(userContext.userId),
-      };
+      const inventoryDoc = buildInventoryDocument(productId, body, userContext);
 
       await coll.insertOne(inventoryDoc);
       return buildResponse(201, buildInventoryResponse(inventoryDoc));

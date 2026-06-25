@@ -10,6 +10,7 @@ import {
   checkOrAcquireLock,
   releaseOrResolveLock,
 } from "./shared.js";
+import { ensureInventoryForProduct } from "./inventory.js";
 
 const VALID_TRACK_TYPES = new Set(["UNIQUE", "BULK"]);
 const MAX_TITLE_LENGTH = 200;
@@ -492,6 +493,15 @@ export const handler = async (event) => {
           }
 
           await coll.insertMany([metadataDoc, ...tierDocs]);
+          await ensureInventoryForProduct(
+            coll,
+            productId,
+            {
+              availableQuantity: body.initialInventoryQuantity ?? body.availableQuantity ?? body.inventoryQuantity ?? 10,
+              inventoryStatus: "AVAILABLE",
+            },
+            userContext
+          );
         } catch (databaseError) {
           if (databaseError?.code === 11000) {
             return createErrorResponse(409, "A product with this id or title already exists");

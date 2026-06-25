@@ -315,7 +315,21 @@ Output: 200 OK
   ]
 }
 
-
+22) POST /payments/intent
+Use case: Create a payment intent for an existing order.
+Input:
+{
+  "orderId": "ord-123"
+}
+Output: 201 Created
+{
+  "paymentId": "<generated-id>",
+  "orderId": "ord-123",
+  "amount": 2598,
+  "currency": "USD",
+  "paymentStatus": "PENDING",
+  "clientSecret": "pi_test_ord-123_secret"
+}
 
 23) POST /payments/verify
 Use case: Mark a payment as verified.
@@ -330,8 +344,31 @@ Output: 200 OK
   "paymentStatus": "AUTHORIZED"
 }
 
+24) POST /payments/capture
+Use case: Capture an authorized payment (admin only).
+Input:
+{
+  "paymentId": "pay-001"
+}
+Output: 200 OK
+{
+  "paymentId": "pay-001",
+  "paymentStatus": "CAPTURED"
+}
 
-
+25) POST /payments/refund
+Use case: Refund a captured payment (admin only).
+Input:
+{
+  "paymentId": "pay-001",
+  "refundAmount": 500
+}
+Output: 200 OK
+{
+  "paymentId": "pay-001",
+  "paymentStatus": "REFUNDED",
+  "refundAmount": 500
+}
 
 26) POST /payments/cancel
 Use case: Cancel an existing payment (admin only).
@@ -345,6 +382,31 @@ Output: 200 OK
   "paymentStatus": "CANCELLED"
 }
 
+27) POST /payments/po-verify
+Use case: Verify a purchase order for a business account.
+Input:
+{
+  "orderId": "ord-123",
+  "creditSafetyMargin": 0.1
+}
+Output: 200 OK
+{
+  "orderId": "ord-123",
+  "paymentStatus": "PAID"
+}
+
+28) POST /payments/webhook
+Use case: Receive provider webhook events.
+Input:
+{
+  "event": "payment_intent.succeeded",
+  "orderId": "ord-123",
+  "source": "stripe"
+}
+Output: 200 OK
+{
+  "received": true
+}
 
 Verified use-case checks
 ------------------------

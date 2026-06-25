@@ -8,6 +8,7 @@ import {
   parseJsonBody,
   updateAuditFields,
 } from "./shared.js";
+import { ensureInventoryForProduct } from "./inventory.js";
 
 const getCartPartition = (userContext) => {
   if (userContext.isBusiness && userContext.businessId) {
