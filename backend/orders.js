@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto";
 import {
+  GetCommand,
+  QueryCommand,
+  TransactWriteItemsCommand,
+  UpdateCommand
+} from "@aws-sdk/lib-dynamodb";
+import {
   buildResponse,
   createErrorResponse,
   extractUserContext,
-  getCollection,
+  getDbClient,
   getPathParam,
   parseJsonBody,
   parseIdempotencyKey,
@@ -14,46 +20,23 @@ import {
   PAYMENT_STATUS,
   createAuditFields,
   updateAuditFields,
-  ROLES,
 } from "./shared.js";
 
-const getCartPartition = (userContext) => {
-  if (userContext.isBusiness && userContext.businessId) {
-    return `CART#${userContext.businessId}`;
-  }
-  return `CART#${userContext.userId}`;
+// ==========================================
+// BUSINESS LOGIC & COMPLIANCE FILTERS
+// ==========================================
+const getCartPartition = (user) => {
+  return user.isBusiness && user.businessId ? `CART#${user.businessId}` : `CART#${user.userId}`;
 };
-
-const getOrderOwnerPartition = (userContext) => {
-  if (userContext.isBusiness && userContext.businessId) {
-    return `BUSINESS#${userContext.businessId}`;
-  }
-  return `USER#${userContext.userId}`;
-};
-
-const activeOrderFilter = (extra = {}) => ({
-  SK: "METADATA",
-  isDeleted: { $ne: true },
-  ...extra,
-});
 
 const isCancellableStatus = (status) =>
   [ORDER_STATUS.PENDING_PAYMENT, ORDER_STATUS.PENDING_MANAGEMENT_APPROVAL].includes(status);
 
-const canAccessOrder = (userContext, order) => {
-  if (!order) {
-    return false;
-  }
-
-  if (userContext.isAdmin) {
-    return true;
-  }
-
-  if (userContext.isBusiness && userContext.businessId) {
-    return order.businessId === userContext.businessId;
-  }
-
-  return order.userId === userContext.userId || order.ownerId === userContext.userId;
+const canAccessOrder = (user, order) => {
+  if (!order) return false;
+  if (user.isAdmin) return true;
+  if (user.isBusiness && user.businessId) return order.businessId === user.businessId;
+  return order.userId === user.userId || order.ownerId === user.userId;
 };
 
 const buildOrderResponse = (order) => ({
@@ -61,169 +44,150 @@ const buildOrderResponse = (order) => ({
   totalAmount: Number(order.totalAmount || 0),
 });
 
-const validationErrorResponse = (errors) => createErrorResponse(422, "Validation failed", { errors });
-
-const writeOrderWithFallback = async (coll, writeOperation) => {
-  if (typeof coll?.db?.client?.startSession !== "function") {
-    return writeOperation(null);
-  }
-
-  const session = coll.db.client.startSession();
-  try {
-    return await session.withTransaction(async () => writeOperation(session));
-  } catch (error) {
-    const shouldFallback = process.env.NODE_ENV === "development" || /transaction|replica set|session|topology/i.test(error?.message || "");
-    if (!shouldFallback) {
-      throw error;
-    }
-
-    return writeOperation(null);
-  } finally {
-    await session.endSession();
-  }
-};
-
-const getOrderMetadata = async (coll, orderId) => {
-  if (!orderId) {
-    return null;
-  }
-
-  return coll.findOne(activeOrderFilter({ PK: `ORDER#${orderId}` }), { projection: { _id: 0 } });
-};
-
-const listOrdersForContext = async (coll, userContext) => {
-  if (userContext.isAdmin) {
-    return coll.find(activeOrderFilter({ PK: { $regex: /^ORDER#/ } })).project({ _id: 0 }).toArray();
-  }
-
-  const partitionKey = userContext.isBusiness && userContext.businessId
-    ? `BUSINESS#${userContext.businessId}`
-    : `USER#${userContext.userId}`;
-
-  const indexDocs = await coll.find({
-    PK: partitionKey,
-    SK: { $regex: /^ORDER#/ },
-    isDeleted: { $ne: true },
-  }).project({ _id: 0, orderId: 1, totalAmount: 1, orderStatus: 1 }).toArray();
-
-  if (indexDocs.length === 0) {
-    return [];
-  }
-
-  const orderIds = indexDocs.map((doc) => doc.orderId).filter(Boolean);
-  const orders = await coll.find({
-    PK: { $in: orderIds.map((id) => `ORDER#${id}`) },
-    SK: "METADATA",
-    isDeleted: { $ne: true },
-  }).project({ _id: 0 }).toArray();
-
-  return orders.sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0));
-};
-
+// ==========================================
+// MAIN AWS LAMBDA HANDLER
+// ==========================================
 export const handler = async (event) => {
   try {
-    const method = event?.httpMethod || event?.requestContext?.httpMethod;
+    const method = event?.httpMethod || event?.requestContext?.httpMethod || event?.requestContext?.http?.method;
     const path = event?.rawPath || event?.path || "";
     const userContext = extractUserContext(event);
+    const { docClient, tableName } = getDbClient();
 
+    if (!userContext.isAuthenticated) {
+      return createErrorResponse(403, "Authentication required");
+    }
+
+    // ------------------------------------------
+    // GET /orders (List History)
+    // ------------------------------------------
     if (method === "GET" && path === "/orders") {
-      if (!userContext.isAuthenticated) {
-        return createErrorResponse(403, "Authentication required");
+      let orders = [];
+
+      if (userContext.isAdmin) {
+        // Admin scan fallback or secondary index lookup
+        const result = await docClient.send(new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: "begins_with(PK, :orderPrefix)",
+          FilterExpression: "SK = :meta AND attribute_not_exists(isDeleted)",
+          ExpressionAttributeValues: { ":orderPrefix": "ORDER#", ":meta": "METADATA" }
+        }));
+        orders = result.Items || [];
+      } else {
+        const partitionKey = userContext.isBusiness && userContext.businessId
+          ? `BUSINESS#${userContext.businessId}`
+          : `USER#${userContext.userId}`;
+
+        // Fetch user or business inverted routing indices
+        const trackingIndex = await docClient.send(new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :skPrefix)",
+          FilterExpression: "attribute_not_exists(isDeleted)",
+          ExpressionAttributeValues: { ":pk": partitionKey, ":skPrefix": "ORDER#" }
+        }));
+
+        // Hydrate full orders metadata using isolated reads
+        for (const indexDoc of trackingIndex.Items || []) {
+          const orderRes = await docClient.send(new GetCommand({
+            TableName: tableName,
+            Key: { PK: `ORDER#${indexDoc.orderId}`, SK: "METADATA" }
+          }));
+          if (orderRes.Item && !orderRes.Item.isDeleted) {
+            orders.push(orderRes.Item);
+          }
+        }
       }
 
-      const coll = await getCollection();
-      const orders = await listOrdersForContext(coll, userContext);
+      orders.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       return buildResponse(200, { orders: orders.map(buildOrderResponse) });
     }
 
+    // ------------------------------------------
+    // GET /orders/{id} (Inspect Variant)
+    // ------------------------------------------
     if (method === "GET" && path.startsWith("/orders/")) {
       const orderId = getPathParam(event, 1);
-      const isCancelRoute = path.split("/").filter(Boolean).length > 2 && path.endsWith("/cancel");
-      if (!orderId || isCancelRoute) {
-        if (!orderId) {
-          return createErrorResponse(400, "Order id is required");
-        }
-      }
+      if (!orderId) return createErrorResponse(400, "Order identification sequence parameter required");
 
-      const coll = await getCollection();
-      const order = await getOrderMetadata(coll, orderId);
-      if (!order) {
-        return createErrorResponse(404, "Order not found");
-      }
+      const res = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
+      }));
 
-      if (!canAccessOrder(userContext, order)) {
-        return createErrorResponse(403, "Access denied");
-      }
+      const order = res.Item;
+      if (!order || order.isDeleted) return createErrorResponse(404, "Target order record missing");
+      if (!canAccessOrder(userContext, order)) return createErrorResponse(403, "Access unauthorized");
 
-      if (method === "GET") {
-        return buildResponse(200, buildOrderResponse(order));
-      }
+      return buildResponse(200, buildOrderResponse(order));
     }
 
+    // ------------------------------------------
+    // POST /orders (Checkout Order Pipeline)
+    // ------------------------------------------
     if (method === "POST" && path === "/orders") {
-      if (!userContext.isAuthenticated) {
-        return createErrorResponse(403, "Authentication required");
-      }
-
       const idempotencyKey = parseIdempotencyKey(event);
       const lockResult = await checkOrAcquireLock(idempotencyKey, userContext);
       if (!lockResult.acquired) {
-        if (lockResult.existing?.responseBody) {
-          return buildResponse(200, lockResult.existing.responseBody);
-        }
-        return createErrorResponse(409, "Idempotency lock already in progress");
+        if (lockResult.existing?.responseBody) return buildResponse(200, lockResult.existing.responseBody);
+        return createErrorResponse(409, "Active execution key in lock-state. Retry shortly.");
       }
 
       try {
         const body = parseJsonBody(event);
-        const coll = await getCollection();
         const cartPartition = getCartPartition(userContext);
-        const cartItems = await coll.find({ PK: cartPartition }).project({ _id: 0 }).toArray();
-        if (cartItems.length === 0) {
-          return createErrorResponse(422, "Cart is empty");
-        }
+
+        // Fetch active cart items across the partition
+        const cartResult = await docClient.send(new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :skPrefix)",
+          FilterExpression: "attribute_not_exists(isDeleted)",
+          ExpressionAttributeValues: { ":pk": cartPartition, ":skPrefix": "ITEM#" }
+        }));
+
+        const cartItems = cartResult.Items || [];
+        if (cartItems.length === 0) return createErrorResponse(422, "Transaction halted: Cart is empty");
 
         const resolvedItems = [];
         for (const cartItem of cartItems) {
-          const quantity = Number(cartItem.quantity || 0);
-          if (!Number.isInteger(quantity) || quantity <= 0) {
-            return createErrorResponse(422, "Each cart item must have a positive quantity");
-          }
+          const qty = Number(cartItem.quantity || 0);
+          
+          // Read item configuration directly from shared document structure
+          const prodRes = await docClient.send(new GetCommand({
+            TableName: tableName,
+            Key: { PK: `PRODUCT#${cartItem.productId}`, SK: "METADATA" }
+          }));
 
-          const product = await coll.findOne({ PK: `PRODUCT#${cartItem.product_id}`, SK: "METADATA" }, { projection: { _id: 0 } });
-          if (!product) {
-            return createErrorResponse(404, `Product not found: ${cartItem.product_id}`);
-          }
+          const product = prodRes.Item;
+          if (!product) return createErrorResponse(404, `Product missing or delisted: ${cartItem.productId}`);
 
-          const unitPrice = Number(product.msrp ?? cartItem.msrp ?? 0);
-          if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
-            return createErrorResponse(422, `Product price is invalid for ${cartItem.product_id}`);
-          }
-
+          const unitPrice = Number(product.price ?? product.msrp ?? cartItem.unitPrice ?? 0);
           resolvedItems.push({
-            productId: cartItem.product_id,
-            title: product.title || cartItem.title || "",
-            quantity,
+            productId: cartItem.productId,
+            title: product.title || cartItem.productTitle || "",
+            quantity: qty,
             unitPrice,
-            lineTotal: Number((quantity * unitPrice).toFixed(2)),
+            lineTotal: Number((qty * unitPrice).toFixed(2)),
           });
         }
 
-        const totalAmount = Number(resolvedItems.reduce((sum, item) => sum + item.lineTotal, 0).toFixed(2));
-        if (totalAmount <= 0) {
-          return createErrorResponse(422, "Order total must be greater than zero");
-        }
+        const totalAmount = Number(resolvedItems.reduce((sum, i) => sum + i.lineTotal, 0).toFixed(2));
+        if (totalAmount <= 0) return createErrorResponse(422, "Calculated total values must scale above zero");
 
-        const requestedOrderId = typeof body.orderId === "string" && body.orderId.trim() ? body.orderId.trim() : null;
-        const orderId = requestedOrderId || randomUUID();
-        const duplicateOrder = await getOrderMetadata(coll, orderId);
-        if (duplicateOrder) {
-          return createErrorResponse(409, "An order with this id already exists");
-        }
+        const orderId = typeof body.orderId === "string" && body.orderId.trim() ? body.orderId.trim() : randomUUID();
+        
+        // Assert order uniqueness
+        const uniqueCheck = await docClient.send(new GetCommand({
+          TableName: tableName,
+          Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
+        }));
+        if (uniqueCheck.Item) return createErrorResponse(409, "Order record collision identified");
 
-        const approvalRequired = Boolean(body.approvalRequired) || (userContext.isBusiness && Number(userContext.creditLimit || 0) > 0 && totalAmount > Number(userContext.creditLimit || 0));
+        const approvalRequired = Boolean(body.approvalRequired) || 
+          (userContext.isBusiness && Number(userContext.creditLimit || 0) > 0 && totalAmount > Number(userContext.creditLimit || 0));
+        
         const orderStatus = approvalRequired ? ORDER_STATUS.PENDING_MANAGEMENT_APPROVAL : ORDER_STATUS.PENDING_PAYMENT;
-        const orderSource = userContext.isBusiness ? ORDER_SOURCES.B2B : ORDER_SOURCES.B2C;
+        const now = new Date().toISOString();
+
         const orderDoc = {
           PK: `ORDER#${orderId}`,
           SK: "METADATA",
@@ -235,230 +199,212 @@ export const handler = async (event) => {
           totalAmount,
           orderStatus,
           paymentStatus: PAYMENT_STATUS.PENDING,
-          paymentId: null,
-          orderSource,
+          orderSource: userContext.isBusiness ? ORDER_SOURCES.B2B : ORDER_SOURCES.B2C,
           notes: typeof body.notes === "string" ? body.notes : "",
-          tags: Array.isArray(body.tags) ? body.tags.filter((tag) => typeof tag === "string") : [],
-          approvalRequired,
-          approvedBy: null,
-          approvedAt: null,
-          isDeleted: false,
-          deletedAt: null,
-          deletedBy: null,
+          createdAt: now,
+          updatedAt: now,
           ...createAuditFields(userContext.userId),
         };
 
-        const userOrderIndexDoc = {
+        const userIndex = {
           PK: `USER#${userContext.userId}`,
           SK: `ORDER#${orderId}`,
           orderId,
           totalAmount,
           orderStatus,
-          isDeleted: false,
+          createdAt: now
         };
 
-        const businessOrderIndexDoc = userContext.isBusiness && userContext.businessId
-          ? {
-              PK: `BUSINESS#${userContext.businessId}`,
-              SK: `ORDER#${orderId}`,
-              orderId,
-              totalAmount,
-              orderStatus,
-              isDeleted: false,
+        // Construct DynamoDB Transaction payload array
+        const transactItems = [
+          { Put: { TableName: tableName, Item: orderDoc } },
+          { Put: { TableName: tableName, Item: userIndex } }
+        ];
+
+        if (userContext.isBusiness && userContext.businessId) {
+          transactItems.push({
+            Put: {
+              TableName: tableName,
+              Item: {
+                PK: `BUSINESS#${userContext.businessId}`,
+                SK: `ORDER#${orderId}`,
+                orderId,
+                totalAmount,
+                orderStatus,
+                createdAt: now
+              }
             }
-          : null;
+          });
+        }
 
-        await writeOrderWithFallback(coll, async (session) => {
-          const writeOptions = session ? { session } : undefined;
-          await coll.insertOne(orderDoc, writeOptions);
-          await coll.insertOne(userOrderIndexDoc, writeOptions);
-          if (businessOrderIndexDoc) {
-            await coll.insertOne(businessOrderIndexDoc, writeOptions);
-          }
-          await coll.deleteMany({ PK: cartPartition }, writeOptions);
-        });
+        // Add soft-delete or actual cleanup directives for existing cart lines
+        for (const item of cartItems) {
+          transactItems.push({
+            Delete: { TableName: tableName, Key: { PK: cartPartition, SK: item.SK } }
+          });
+        }
 
-        const responsePayload = { order: buildOrderResponse(orderDoc), userOrderIndex: userOrderIndexDoc, businessOrderIndex: businessOrderIndexDoc };
+        // Atomic multi-entity structural transaction
+        await docClient.send(new TransactWriteItemsCommand({ TransactItems: transactItems }));
+
+        const responsePayload = { order: buildOrderResponse(orderDoc) };
         await releaseOrResolveLock(idempotencyKey, responsePayload);
         return buildResponse(201, responsePayload);
-      } catch (error) {
-        await releaseOrResolveLock(idempotencyKey, { error: error.message });
-        return createErrorResponse(500, "Failed to create order", error.message);
+
+      } catch (innerErr) {
+        await releaseOrResolveLock(idempotencyKey, { error: innerErr.message });
+        throw innerErr;
       }
     }
 
+    // ------------------------------------------
+    // PUT /orders/{id} (Update Order Context)
+    // ------------------------------------------
     if (method === "PUT" && path.startsWith("/orders/")) {
       const orderId = getPathParam(event, 1);
-      const cancelRoute = path.split("/").filter(Boolean).length > 2 && path.endsWith("/cancel");
-      if (!orderId) {
-        return createErrorResponse(400, "Order id is required");
-      }
+      const isCancelRoute = path.endsWith("/cancel");
 
-      const coll = await getCollection();
-      const order = await getOrderMetadata(coll, orderId);
-      if (!order) {
-        return createErrorResponse(404, "Order not found");
-      }
+      if (!orderId) return createErrorResponse(400, "Target orderId placeholder parameter required");
 
-      if (!canAccessOrder(userContext, order)) {
-        return createErrorResponse(403, "Access denied");
-      }
+      const existingRes = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
+      }));
 
-      if (cancelRoute) {
+      const order = existingRes.Item;
+      if (!order || order.isDeleted) return createErrorResponse(404, "Target order metadata record missing");
+      if (!canAccessOrder(userContext, order)) return createErrorResponse(403, "Access unauthorized");
+
+      const now = new Date().toISOString();
+
+      // Cancel Logic Path Block
+      if (isCancelRoute) {
         if (!isCancellableStatus(order.orderStatus)) {
-          return createErrorResponse(409, "Order cannot be cancelled at its current status");
+          return createErrorResponse(409, "State conflict: Current processing progress rejects instant cancellation cascades");
         }
 
-        const updatedOrder = {
-          ...order,
-          orderStatus: ORDER_STATUS.CANCELLED,
-          paymentStatus: order.paymentStatus === PAYMENT_STATUS.PAID ? PAYMENT_STATUS.REFUNDED : order.paymentStatus || PAYMENT_STATUS.PENDING,
-          updatedAt: new Date(),
-          updatedBy: userContext.userId,
-        };
+        const targetStatus = ORDER_STATUS.CANCELLED;
+        const targetPayment = order.paymentStatus === PAYMENT_STATUS.PAID ? PAYMENT_STATUS.REFUNDED : PAYMENT_STATUS.PENDING;
 
-        await coll.updateOne(
-          { PK: `ORDER#${orderId}`, SK: "METADATA" },
-          { $set: updatedOrder }
-        );
-        await coll.updateMany(
-          { PK: { $in: [`USER#${order.userId || order.ownerId}`, ...(order.businessId ? [`BUSINESS#${order.businessId}`] : [])] }, SK: `ORDER#${orderId}` },
-          { $set: {
-            orderStatus: ORDER_STATUS.CANCELLED,
-            updatedAt: new Date(),
-          } }
-        );
+        const transactUpdates = [
+          {
+            Update: {
+              TableName: tableName,
+              Key: { PK: `ORDER#${orderId}`, SK: "METADATA" },
+              UpdateExpression: "SET orderStatus = :os, paymentStatus = :ps, updatedAt = :now, updatedBy = :uid",
+              ExpressionAttributeValues: { ":os": targetStatus, ":ps": targetPayment, ":now": now, ":uid": userContext.userId }
+            }
+          },
+          {
+            Update: {
+              TableName: tableName,
+              Key: { PK: `USER#${order.userId}`, SK: `ORDER#${orderId}` },
+              UpdateExpression: "SET orderStatus = :os, updatedAt = :now",
+              ExpressionAttributeValues: { ":os": targetStatus, ":now": now }
+            }
+          }
+        ];
 
-        return buildResponse(200, { order: buildOrderResponse(updatedOrder) });
+        if (order.businessId) {
+          transactUpdates.push({
+            Update: {
+              TableName: tableName,
+              Key: { PK: `BUSINESS#${order.businessId}`, SK: `ORDER#${orderId}` },
+              UpdateExpression: "SET orderStatus = :os, updatedAt = :now",
+              ExpressionAttributeValues: { ":os": targetStatus, ":now": now }
+            }
+          });
+        }
+
+        await docClient.send(new TransactWriteItemsCommand({ TransactItems: transactUpdates }));
+        return buildResponse(200, { message: "Order cancellation processing successfully performed" });
       }
 
+      // Context Field Attribute Patch Flow
       const body = parseJsonBody(event);
-      if (!body || Object.keys(body).length === 0) {
-        return createErrorResponse(400, "At least one updatable field is required");
-      }
+      if (!body || Object.keys(body).length === 0) return createErrorResponse(400, "Updatable data parameters missing");
 
-      const updatePayload = {};
+      const updateExpressions = [];
+      const expressionAttributeValues = { ":now": now, ":uid": userContext.userId };
+
       if (body.notes !== undefined) {
-        if (typeof body.notes !== "string") {
-          return createErrorResponse(422, "notes must be a string");
-        }
-        updatePayload.notes = body.notes;
+        updateExpressions.push("notes = :notes");
+        expressionAttributeValues[":notes"] = String(body.notes);
       }
-
-      if (body.tags !== undefined) {
-        if (!Array.isArray(body.tags)) {
-          return createErrorResponse(422, "tags must be an array");
-        }
-        updatePayload.tags = body.tags.filter((tag) => typeof tag === "string");
-      }
-
-      if (body.orderSource !== undefined) {
-        if (![ORDER_SOURCES.B2C, ORDER_SOURCES.B2B].includes(body.orderSource)) {
-          return createErrorResponse(422, "orderSource must be B2C or B2B");
-        }
-        updatePayload.orderSource = body.orderSource;
-      }
-
-      if (body.approvalRequired !== undefined) {
-        if (typeof body.approvalRequired !== "boolean") {
-          return createErrorResponse(422, "approvalRequired must be a boolean");
-        }
-        updatePayload.approvalRequired = body.approvalRequired;
-      }
-
-      if (body.paymentStatus !== undefined) {
-        if (typeof body.paymentStatus !== "string" || !body.paymentStatus.trim()) {
-          return createErrorResponse(422, "paymentStatus must be a non-empty string");
-        }
-        updatePayload.paymentStatus = body.paymentStatus;
-      }
-
-      if (body.paymentId !== undefined) {
-        updatePayload.paymentId = body.paymentId;
-      }
-
       if (body.orderStatus !== undefined) {
-        if (!userContext.isAdmin) {
-          return createErrorResponse(403, "Only admins can update order status");
-        }
-
-        if (!Object.values(ORDER_STATUS).includes(body.orderStatus)) {
-          return createErrorResponse(422, "orderStatus is invalid");
-        }
-        updatePayload.orderStatus = body.orderStatus;
+        if (!userContext.isAdmin) return createErrorResponse(403, "Privilege violation: Only administration keys alter system status metrics");
+        updateExpressions.push("orderStatus = :orderStatus");
+        expressionAttributeValues[":orderStatus"] = body.orderStatus;
       }
 
-      if (Object.keys(updatePayload).length === 0) {
-        return createErrorResponse(400, "At least one updatable field is required");
-      }
+      if (updateExpressions.length === 0) return createErrorResponse(400, "No applicable delta operations resolved");
 
-      const updatedOrder = {
-        ...order,
-        ...updatePayload,
-        ...updateAuditFields(userContext.userId),
-      };
+      const expressionString = `SET ${updateExpressions.join(", ")}, updatedAt = :now, updatedBy = :uid`;
 
-      await coll.updateOne(
-        { PK: `ORDER#${orderId}`, SK: "METADATA" },
-        { $set: updatedOrder }
-      );
+      await docClient.send(new UpdateCommand({
+        TableName: tableName,
+        Key: { PK: `ORDER#${orderId}`, SK: "METADATA" },
+        UpdateExpression: expressionString,
+        ExpressionAttributeValues: expressionAttributeValues
+      }));
 
-      await coll.updateMany(
-        { PK: { $in: [`USER#${order.userId || order.ownerId}`, ...(order.businessId ? [`BUSINESS#${order.businessId}`] : [])] }, SK: `ORDER#${orderId}` },
-        { $set: {
-          orderStatus: updatedOrder.orderStatus,
-          totalAmount: updatedOrder.totalAmount,
-          updatedAt: updatedOrder.updatedAt,
-        } }
-      );
-
-      return buildResponse(200, { order: buildOrderResponse(updatedOrder) });
+      return buildResponse(200, { message: "Order metrics modified successfully" });
     }
 
+    // ------------------------------------------
+    // DELETE /orders/{id} (Soft-Delete Order Record)
+    // ------------------------------------------
     if (method === "DELETE" && path.startsWith("/orders/")) {
       const orderId = getPathParam(event, 1);
-      if (!orderId) {
-        return createErrorResponse(400, "Order id is required");
+      if (!orderId) return createErrorResponse(400, "Order missing identification key placeholder");
+
+      const existingRes = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
+      }));
+
+      const order = existingRes.Item;
+      if (!order || order.isDeleted) return createErrorResponse(404, "Target order documentation record missing");
+      if (!canAccessOrder(userContext, order)) return createErrorResponse(403, "Access unauthorized");
+
+      const now = new Date().toISOString();
+      const transactDeletes = [
+        {
+          Update: {
+            TableName: tableName,
+            Key: { PK: `ORDER#${orderId}`, SK: "METADATA" },
+            UpdateExpression: "SET isDeleted = :t, deletedAt = :now, deletedBy = :uid",
+            ExpressionAttributeValues: { ":t": true, ":now": now, ":uid": userContext.userId }
+          }
+        },
+        {
+          Update: {
+            TableName: tableName,
+            Key: { PK: `USER#${order.userId}`, SK: `ORDER#${orderId}` },
+            UpdateExpression: "SET isDeleted = :t",
+            ExpressionAttributeValues: { ":t": true }
+          }
+        }
+      ];
+
+      if (order.businessId) {
+        transactDeletes.push({
+          Update: {
+            TableName: tableName,
+            Key: { PK: `BUSINESS#${order.businessId}`, SK: `ORDER#${orderId}` },
+            UpdateExpression: "SET isDeleted = :t",
+            ExpressionAttributeValues: { ":t": true }
+          }
+        });
       }
 
-      const coll = await getCollection();
-      const order = await getOrderMetadata(coll, orderId);
-      if (!order) {
-        return createErrorResponse(404, "Order not found");
-      }
-
-      if (!canAccessOrder(userContext, order)) {
-        return createErrorResponse(403, "Access denied");
-      }
-
-      const softDeletedOrder = {
-        ...order,
-        isDeleted: true,
-        deletedAt: new Date(),
-        deletedBy: userContext.userId,
-        updatedAt: new Date(),
-        updatedBy: userContext.userId,
-      };
-
-      await coll.updateOne(
-        { PK: `ORDER#${orderId}`, SK: "METADATA" },
-        { $set: softDeletedOrder }
-      );
-      await coll.updateMany(
-        { PK: { $in: [`USER#${order.userId || order.ownerId}`, ...(order.businessId ? [`BUSINESS#${order.businessId}`] : [])] }, SK: `ORDER#${orderId}` },
-        { $set: {
-          isDeleted: true,
-          deletedAt: softDeletedOrder.deletedAt,
-          deletedBy: softDeletedOrder.deletedBy,
-          updatedAt: softDeletedOrder.updatedAt,
-        } }
-      );
-
-      return buildResponse(200, { order: buildOrderResponse(softDeletedOrder) });
+      await docClient.send(new TransactWriteItemsCommand({ TransactItems: transactDeletes }));
+      return buildResponse(200, { message: "Order trace elements successfully purged" });
     }
 
-    return createErrorResponse(404, "Route not found");
+    return createErrorResponse(404, "Routing path destination matching unresolvable");
   } catch (error) {
-    return createErrorResponse(500, "Unexpected orders service error", error.message);
+    console.error("[Orders Service Execution Error]", error);
+    return createErrorResponse(500, "Fatal downstream microservice order runtime execution exception", error.message);
   }
 };

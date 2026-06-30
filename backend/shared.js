@@ -1,350 +1,142 @@
 import { randomUUID } from "node:crypto";
-import { MongoClient } from "mongodb";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, UpdateCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 
-let mongoClient = null;
-let collection = null;
-export const getCollection = async () => {
-  console.log("getCollection called");
 
-  const uri = process.env.MONGODB_URI;
-  const dbName = process.env.MONGODB_DB_NAME;
-  const collName = process.env.MONGODB_COLLECTION_NAME;
+let docClientInstance = null;
 
-  console.log({
-    uriExists: !!uri,
-    dbName,
-    collName,
-  });
+export const getDbClient = () => {
+  if (!docClientInstance) {
+    const isLocal = process.env.IS_LOCAL === "true";
+    
+    const clientConfig = {
+      region: process.env.AWS_REGION || "ap-southeast-1"
+    };
 
-  try {
-    if (!mongoClient) {
-      console.log("Creating MongoClient");
-
-      mongoClient = new MongoClient(uri, {
-        maxPoolSize: 10,
-        serverSelectionTimeoutMS: 5000,
-      });
-
-      console.log("Connecting...");
-      await mongoClient.connect();
-      console.log("Connected successfully");
+    // Only inject local endpoints if explicitly testing offline
+    if (isLocal) {
+      clientConfig.endpoint = process.env.DYNAMODB_ENDPOINT || "http://localhost:8000";
+      clientConfig.credentials = { accessKeyId: "local", secretAccessKey: "local" };
     }
 
-    const db = mongoClient.db(dbName);
-    collection = db.collection(collName);
-
-    return collection;
-  } catch (err) {
-    console.error("Mongo connection failed:", err);
-
-    mongoClient = null;
-    collection = null;
-
-    throw err;
+    const client = new DynamoDBClient(clientConfig);
+    docClientInstance = DynamoDBDocumentClient.from(client, {
+      marshallOptions: { removeUndefinedValues: true }
+    });
   }
-};
-
-const getHeaderValue = (event, headerNames) => {
-  const headers = event?.headers || {};
-
-  for (const headerName of headerNames) {
-    const value = headers[headerName];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  const normalizedHeaders = Object.entries(headers).reduce((acc, [key, value]) => {
-    acc[key.toLowerCase()] = value;
-    return acc;
-  }, {});
-
-  for (const headerName of headerNames) {
-    const value = normalizedHeaders[headerName.toLowerCase()];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return null;
-};
-
-const normalizeRoleName = (value) => String(value || "").trim().toLowerCase();
-
-const deriveRoles = (groups = []) => {
-  const normalizedGroups = groups
-    .map((group) => String(group).trim())
-    .filter(Boolean);
-
-  const isAdmin = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.ADMIN));
-  const isBusiness = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.BUSINESS));
-  const isCustomer = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.CUSTOMER)) || (!isAdmin && !isBusiness);
 
   return {
-    groups: normalizedGroups,
-    isAdmin,
-    isBusiness,
-    isCustomer,
+    docClient: docClientInstance,
+    tableName: process.env.TABLE_NAME || "JewelCart"
   };
 };
+// ==========================================
+// CONSTANTS & ENUMS (Unchanged)
+// ==========================================
+export const ROLES = Object.freeze({
+  ADMIN: "Admin",
+  BUSINESS: "Business",
+  CUSTOMER: "Customer",
+});
 
+// ... Keep your other constants (ORDER_STATUS, PAYMENT_STATUS, etc.) exactly the same
 
-export const extractUserContext = (event) => {
-  const claims = event?.requestContext?.authorizer?.jwt?.claims || {};
-  const roleHeader = getHeaderValue(event, ["x-role", "x-user-role"]);
+// ==========================================
+// STATELESS DYNAMODB CONNECTION (No Pool Management Required)
+// ==========================================
+let docClient = null;
 
-  if (roleHeader) {
-    const rawGroups = roleHeader.split(",");
-    const normalizedGroups = rawGroups
-      .map((group) => String(group).trim())
-      .filter(Boolean);
-
-    const isAdmin = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.ADMIN));
-    const isBusiness = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.BUSINESS));
-    const isCustomer = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.CUSTOMER)) || (!isAdmin && !isBusiness);
-
-    return {
-      userId: claims.sub || claims.username || "local-user",
-      groups: normalizedGroups,
-      businessId:
-        claims["custom:business_id"] ||
-        claims.business_id ||
-        getHeaderValue(event, ["x-business-id"]) ||
-        null,
-      isAuthenticated: true,
-      isAdmin,
-      isBusiness,
-      isCustomer,
-      taxExempt:
-        claims["custom:tax_exempt"] === "true" ||
-        claims.tax_exempt === "true",
-      creditLimit: Number(
-        claims["custom:credit_limit"] ||
-        claims.credit_limit ||
-        0
-      ),
-    };
+export const getDbClient = () => {
+  const tableName = process.env.DYNAMODB_TABLE_NAME;
+  if (!tableName) {
+    throw new Error("Missing DYNAMODB_TABLE_NAME environment variable.");
   }
 
-  if (process.env.NODE_ENV === "development") {
-    return {
-      userId: "local-user",
-      groups: [],
-      businessId: null,
-      isAuthenticated: true,
-      isAdmin: false,
-      isBusiness: false,
-      isCustomer: true,
-      taxExempt: false,
-      creditLimit: 0,
-    };
+  if (!docClient) {
+    // The AWS SDK automatically handles connection pooling and keep-alive optimization
+    const client = new DynamoDBClient({
+      region: process.env.AWS_REGION || "us-east-1",
+    });
+    docClient = DynamoDBDocumentClient.from(client, {
+      marshallOptions: { removeUndefinedValues: true },
+    });
   }
 
-  const rawGroups = claims["cognito:groups"] || claims.groups || [];
-
-  const groups = Array.isArray(rawGroups)
-    ? rawGroups
-    : typeof rawGroups === "string"
-      ? rawGroups.split(",")
-      : [];
-
-  const normalizedGroups = groups.map((group) =>
-    String(group).trim()
-  );
-
-  const isAdmin = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.ADMIN));
-  const isBusiness = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.BUSINESS));
-  const isCustomer = normalizedGroups.some((group) => normalizeRoleName(group) === normalizeRoleName(ROLES.CUSTOMER)) || (!isAdmin && !isBusiness);
-
-  return {
-    userId: claims.sub || claims.username || "anonymous",
-    groups: normalizedGroups,
-    businessId:
-      claims["custom:business_id"] ||
-      claims.business_id ||
-      null,
-    isAuthenticated:
-      Boolean(claims.sub || claims.username),
-    isAdmin,
-    isBusiness,
-    isCustomer,
-    taxExempt:
-      claims["custom:tax_exempt"] === "true" ||
-      claims.tax_exempt === "true",
-    creditLimit: Number(
-      claims["custom:credit_limit"] ||
-      claims.credit_limit ||
-      0
-    ),
-  };
+  return { docClient, tableName };
 };
 
-export const parseJsonBody = (event) => {
-  if (!event?.body) {
-    return {};
-  }
-
-  if (typeof event.body === "object") {
-    return event.body;
-  }
-
-  try {
-    return JSON.parse(event.body);
-  } catch {
-    return {};
-  }
-};
-
-export const getPathParam = (event, index) => {
-  const rawPath = event?.rawPath || event?.path || "";
-  const segments = rawPath.split("/").filter(Boolean);
-  return segments[index] || null;
-};
-
-export const parseIdempotencyKey = (event) => {
-  return event?.headers?.["X-Idempotency-Key"] || event?.headers?.["x-idempotency-key"] || null;
-};
-
+// ==========================================
+// SERVERLESS IDEMPOTENCY LOCKS (Migrated to DynamoDB)
+// ==========================================
 export const checkOrAcquireLock = async (idempotencyKey, context) => {
   if (!idempotencyKey) {
     return { acquired: true, existing: null };
   }
 
-  const coll = await getCollection();
+  const { docClient, tableName } = getDbClient();
   const pk = `IDEMPOTENCY#${idempotencyKey}`;
-  const lockDoc = {
-    PK: pk,
-    SK: "LOCK",
-    status: "PROCESSING",
-    ttl: new Date(Date.now() + 5 * 60 * 1000),
-    createdAt: new Date(),
-    ownerId: context?.userId || "anonymous",
-  };
+  const sk = "LOCK";
+  
+  // Calculate epoch timestamp in seconds for DynamoDB's native TTL feature
+  const ttlEpochSeconds = Math.floor((Date.now() + 5 * 60 * 1000) / 1000); 
 
   try {
-    await coll.insertOne(lockDoc);
+    // ConditionExpression ensures atomic execution. If PK/SK exists, it fails safely.
+    await docClient.send(
+      new PutCommand({
+        TableName: tableName,
+        Item: {
+          PK: pk,
+          SK: sk,
+          status: "PROCESSING",
+          ttl: ttlEpochSeconds, 
+          createdAt: new Date().toISOString(),
+          ownerId: context?.userId || "anonymous",
+        },
+        ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+      })
+    );
     return { acquired: true, existing: null };
   } catch (error) {
-    if (error?.code === 11000) {
-      const existing = await coll.findOne({ PK: pk, SK: "LOCK" });
-      return { acquired: false, existing };
+    if (error.name === "ConditionalCheckFailedException") {
+      // Lock already exists, fetch it to return its current status/body
+      const result = await docClient.send(
+        new GetCommand({
+          TableName: tableName,
+          Key: { PK: pk, SK: sk },
+        })
+      );
+      return { acquired: false, existing: result.Item || null };
     }
     throw error;
   }
 };
 
 export const releaseOrResolveLock = async (idempotencyKey, responsePayload) => {
-  if (!idempotencyKey) {
-    return;
-  }
+  if (!idempotencyKey) return;
 
-  const coll = await getCollection();
+  const { docClient, tableName } = getDbClient();
   const pk = `IDEMPOTENCY#${idempotencyKey}`;
-  await coll.updateOne(
-    { PK: pk, SK: "LOCK" },
-    {
-      $set: {
-        status: "COMPLETED",
-        responseBody: responsePayload,
-        ttl: new Date(Date.now() + 5 * 60 * 1000),
-        updatedAt: new Date(),
+  const sk = "LOCK";
+  const ttlEpochSeconds = Math.floor((Date.now() + 5 * 60 * 1000) / 1000);
+
+  await docClient.send(
+    new UpdateCommand({
+      TableName: tableName,
+      Key: { PK: pk, SK: sk },
+      UpdateExpression: "SET #status = :status, responseBody = :body, #ttl = :ttl, updatedAt = :updatedAt",
+      ExpressionAttributeNames: {
+        "#status": "status",
+        "#ttl": "ttl",
       },
-    },
-    { upsert: true }
+      ExpressionAttributeValues: {
+        ":status": "COMPLETED",
+        ":body": responsePayload,
+        ":ttl": ttlEpochSeconds,
+        ":updatedAt": new Date().toISOString(),
+      },
+    })
   );
 };
 
-export const buildResponse = (statusCode, body) => ({
-  statusCode,
-  headers: {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-  },
-  body: JSON.stringify(body),
-});
-
-export const createErrorResponse = (statusCode, message, details = null) =>
-  buildResponse(statusCode, {
-    error: message,
-    ...(details ? { details } : {}),
-  });
-
-  export const ORDER_STATUS = Object.freeze({
-  PENDING_PAYMENT: "PENDING_PAYMENT",
-  PENDING_MANAGEMENT_APPROVAL: "PENDING_MANAGEMENT_APPROVAL",
-  PROCESSING: "PROCESSING",
-  SHIPPED: "SHIPPED",
-  DELIVERED: "DELIVERED",
-  CANCELLED: "CANCELLED",
-  REFUNDED: "REFUNDED",
-});
-
-export const ORDER_SOURCES = Object.freeze({
-  B2C: "B2C",
-  B2B: "B2B",
-});
-
-export const PAYMENT_STATUS = Object.freeze({
-  PENDING: "PENDING",
-  AUTHORIZED: "AUTHORIZED",
-  CAPTURED: "CAPTURED",
-  PAID: "PAID",
-  FAILED: "FAILED",
-  REFUNDED: "REFUNDED",
-  CANCELLED: "CANCELLED",
-});
-
-export const ROLES = {
-    ADMIN: "Admin",
-    BUSINESS: "Business",
-    CUSTOMER: "Customer",
-  };
-  
-  export const ENTITY_TYPES = {
-    PRODUCT: "PRODUCT",
-    CUSTOMER: "CUSTOMER",
-    CART: "CART",
-    ORDER: "ORDER",
-    PAYMENT: "PAYMENT",
-  };
-  
-  export const generateId = () => randomUUID();
-  
-  export const createAuditFields = (userId) => ({
-    createdBy: userId,
-    updatedBy: userId,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
-  
-  export const updateAuditFields = (userId) => ({
-    updatedBy: userId,
-    updatedAt: new Date(),
-  });
-
-
-
-  export const hasRole = (context, role) => {
-    switch (role) {
-      case ROLES.ADMIN:
-        return context?.isAdmin;
-  
-      case ROLES.BUSINESS:
-        return context?.isBusiness;
-  
-      case ROLES.CUSTOMER:
-        return context?.isCustomer;
-  
-      default:
-        return false;
-    }
-  };
-  
-  export const authorize = (
-    context,
-    allowedRoles = []
-  ) => {
-    return allowedRoles.some((role) =>
-      hasRole(context, role)
-    );
-  };
+// ... Keep your API Gateway mapping functions (parseJsonBody, buildResponse, extractUserContext) exactly the same

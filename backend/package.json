@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Production-ready serverless backend for JewelCart",
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1076.0",
+    "@aws-sdk/lib-dynamodb": "^3.1076.0",
     "dotenv": "^17.4.2",
     "mongodb": "^6.9.0"
   }

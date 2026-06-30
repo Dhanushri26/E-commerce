@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
 import {
+  GetCommand,
+  QueryCommand,
+  PutCommand,
+  UpdateCommand,
+  TransactWriteItemsCommand
+} from "@aws-sdk/lib-dynamodb";
+import {
   buildResponse,
   createErrorResponse,
   extractUserContext,
-  getCollection,
+  getDbClient,
   getPathParam,
   parseJsonBody,
   PAYMENT_STATUS,
@@ -11,28 +18,17 @@ import {
   updateAuditFields,
 } from "./shared.js";
 
-const activePaymentFilter = (extra = {}) => ({
-  SK: "PAYMENT",
-  isDeleted: { $ne: true },
-  ...extra,
-});
+// ==========================================
+// BUSINESS LOGIC & PERMISSION DOMAINS
+// ==========================================
+const canReadPayments = (user) => user.isAdmin || user.isBusiness || user.isCustomer;
+const canManagePayments = (user) => user.isAdmin;
 
-const canReadPayments = (userContext) => userContext.isAdmin || userContext.isBusiness || userContext.isCustomer;
-const canManagePayments = (userContext) => userContext.isAdmin;
-const canAccessPayment = (userContext, payment) => {
-  if (!payment) {
-    return false;
-  }
-
-  if (userContext.isAdmin) {
-    return true;
-  }
-
-  if (userContext.isBusiness && userContext.businessId) {
-    return payment.businessId === userContext.businessId;
-  }
-
-  return payment.ownerId === userContext.userId;
+const canAccessPayment = (user, payment) => {
+  if (!payment) return false;
+  if (user.isAdmin) return true;
+  if (user.isBusiness && user.businessId) return payment.businessId === user.businessId;
+  return payment.ownerId === user.userId;
 };
 
 const buildPaymentResponse = (payment) => ({
@@ -43,102 +39,36 @@ const buildPaymentResponse = (payment) => ({
 const validatePaymentBody = (body) => {
   const errors = [];
   const amount = Number(body.amount ?? body.totalAmount ?? 0);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    errors.push("amount must be a positive number");
-  }
-  if (!body.orderId && !body.order_id) {
-    errors.push("orderId is required");
-  }
-  if (typeof body.currency !== "string" || !body.currency.trim()) {
-    errors.push("currency is required");
-  }
-  if (body.paymentMethod && typeof body.paymentMethod !== "string") {
-    errors.push("paymentMethod must be a string");
-  }
+  if (!Number.isFinite(amount) || amount <= 0) errors.push("amount must be a positive number");
+  if (!body.orderId && !body.order_id) errors.push("orderId is required");
+  if (typeof body.currency !== "string" || !body.currency.trim()) errors.push("currency is required");
   return errors;
 };
 
-const getPaymentDocument = async (coll, paymentId) => {
-  if (!paymentId) {
-    return null;
-  }
-  return coll.findOne(activePaymentFilter({ PK: `PAYMENT#${paymentId}` }), { projection: { _id: 0 } });
-};
-
-const listPaymentsForContext = async (coll, userContext) => {
-  const filter = activePaymentFilter();
-  if (!userContext.isAdmin) {
-    if (userContext.isBusiness && userContext.businessId) {
-      filter.businessId = userContext.businessId;
-    } else {
-      filter.ownerId = userContext.userId;
-    }
-  }
-  return coll.find(filter).project({ _id: 0 }).toArray();
-};
-
-const updateOrderPaymentStatus = async (coll, orderId, paymentStatus) => {
-  if (!orderId) {
-    return;
-  }
-  await coll.updateOne(
-    { PK: `ORDER#${orderId}`, SK: "METADATA" },
-    { $set: { paymentStatus, updatedAt: new Date() } }
-  );
-};
-
-const verifyPurchaseOrder = async (coll, orderId, userContext, body = {}) => {
-  const order = await coll.findOne({ PK: `ORDER#${orderId}`, SK: "METADATA" }, { projection: { _id: 0 } });
-  if (!order) {
-    return { error: createErrorResponse(404, "Order not found") };
-  }
-
-  const rawSafetyMargin = body.creditSafetyMargin ?? body.credit_safety_margin ?? 0.1;
-  const safetyMargin = Number(rawSafetyMargin);
-  if (!Number.isFinite(safetyMargin) || safetyMargin < 0 || safetyMargin >= 1) {
-    return { error: createErrorResponse(422, "creditSafetyMargin must be a number between 0 and 1") };
-  }
-
-  const creditLimit = Number.isFinite(Number(userContext.creditLimit)) ? Number(userContext.creditLimit) : 0;
-  const outstandingInvoices = Number(body.outstandingInvoices ?? body.outstanding_invoices ?? 0);
-  const creditUtilization = Number(body.creditUtilization ?? body.credit_utilization ?? 0);
-  const allowed = Number(order.totalAmount) <= creditLimit * (1 - safetyMargin) - outstandingInvoices - creditUtilization;
-  if (!allowed) {
-    return { error: createErrorResponse(422, "Purchase order exceeds approved credit envelope") };
-  }
-
-  return { order };
-};
-
-const validateWebhookPayload = (body) => {
-  const source = body?.source || body?.provider || null;
-  const eventName = body?.event || body?.type || null;
-  if (!source || !eventName) {
-    return false;
-  }
-  return Boolean(body?.data);
-};
-
+// ==========================================
+// MAIN AWS LAMBDA HANDLER
+// ==========================================
 export const handler = async (event) => {
   try {
-    const method = event?.httpMethod || event?.requestContext?.httpMethod;
+    const method = event?.httpMethod || event?.requestContext?.httpMethod || event?.requestContext?.http?.method;
     const path = event?.rawPath || event?.path || "";
     const userContext = extractUserContext(event);
+    const { docClient, tableName } = getDbClient();
 
+    // ------------------------------------------
+    // POST /payments (Initiate Transaction)
+    // ------------------------------------------
     if (method === "POST" && path === "/payments") {
-      if (!userContext.isAuthenticated) {
-        return createErrorResponse(403, "Authentication required");
-      }
+      if (!userContext.isAuthenticated) return createErrorResponse(403, "Authentication required");
 
       const body = parseJsonBody(event);
       const validationErrors = validatePaymentBody(body);
-      if (validationErrors.length > 0) {
-        return createErrorResponse(422, "Validation failed", { errors: validationErrors });
-      }
+      if (validationErrors.length > 0) return createErrorResponse(422, "Validation failed", { errors: validationErrors });
 
-      const coll = await getCollection();
       const orderId = body.orderId || body.order_id;
       const paymentId = body.paymentId || randomUUID();
+      const now = new Date().toISOString();
+
       const paymentDoc = {
         PK: `PAYMENT#${paymentId}`,
         SK: "PAYMENT",
@@ -152,233 +82,253 @@ export const handler = async (event) => {
         ownerId: userContext.userId,
         businessId: userContext.businessId || null,
         isDeleted: false,
-        deletedAt: null,
-        deletedBy: null,
+        createdAt: now,
+        updatedAt: now,
         ...createAuditFields(userContext.userId),
       };
 
-      await coll.insertOne(paymentDoc);
+      await docClient.send(new PutCommand({ TableName: tableName, Item: paymentDoc }));
       return buildResponse(201, buildPaymentResponse(paymentDoc));
     }
 
+    // ------------------------------------------
+    // GET /payments (Query Transaction History)
+    // ------------------------------------------
     if (method === "GET" && (path === "/payments" || path === "/payments/")) {
-      if (!canReadPayments(userContext)) {
-        return createErrorResponse(403, "Access denied");
+      if (!canReadPayments(userContext)) return createErrorResponse(403, "Access denied");
+
+      let payments = [];
+      if (userContext.isAdmin) {
+        const result = await docClient.send(new QueryCommand({
+          TableName: tableName,
+          IndexName: "SK-PK-Index",
+          KeyConditionExpression: "SK = :sk",
+          FilterExpression: "attribute_not_exists(isDeleted) AND begins_with(PK, :prefix)",
+          ExpressionAttributeValues: { ":sk": "PAYMENT", ":prefix": "PAYMENT#" }
+        }));
+        payments = result.Items || [];
+      } else {
+        // Fallback to Scan with filter if secondary indexes are local (safeguarded pattern)
+        const filterExpression = userContext.isBusiness && userContext.businessId
+          ? "businessId = :bizId AND attribute_not_exists(isDeleted)"
+          : "ownerId = :ownerId AND attribute_not_exists(isDeleted)";
+          
+        const expressionValues = userContext.isBusiness && userContext.businessId
+          ? { ":bizId": userContext.businessId }
+          : { ":ownerId": userContext.userId };
+
+        const result = await docClient.send(new QueryCommand({
+          TableName: tableName,
+          IndexName: "SK-PK-Index",
+          KeyConditionExpression: "SK = :sk",
+          FilterExpression: filterExpression,
+          ExpressionAttributeValues: { ":sk": "PAYMENT", ...expressionValues }
+        }));
+        payments = result.Items || [];
       }
-      const coll = await getCollection();
-      const payments = await listPaymentsForContext(coll, userContext);
+
       return buildResponse(200, { payments: payments.map(buildPaymentResponse) });
     }
 
+    // ------------------------------------------
+    // GET /payments/{id} (Inspect Transaction)
+    // ------------------------------------------
     if (method === "GET" && path.startsWith("/payments/")) {
       const paymentId = getPathParam(event, 1);
-      if (!paymentId) {
-        return createErrorResponse(400, "Payment id is required");
-      }
-      const coll = await getCollection();
-      const payment = await getPaymentDocument(coll, paymentId);
-      if (!payment) {
-        return createErrorResponse(404, "Payment not found");
-      }
-      if (!canAccessPayment(userContext, payment)) {
-        return createErrorResponse(403, "Access denied");
-      }
+      if (!paymentId) return createErrorResponse(400, "Payment id is required");
+
+      const res = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" }
+      }));
+
+      const payment = res.Item;
+      if (!payment || payment.isDeleted) return createErrorResponse(404, "Payment record not found");
+      if (!canAccessPayment(userContext, payment)) return createErrorResponse(403, "Access denied");
+
       return buildResponse(200, buildPaymentResponse(payment));
     }
 
+    // ------------------------------------------
+    // PUT /payments/{id} (Update and Cascade Status)
+    // ------------------------------------------
     if (method === "PUT" && path.startsWith("/payments/")) {
       const paymentId = getPathParam(event, 1);
-      if (!paymentId) {
-        return createErrorResponse(400, "Payment id is required");
-      }
-      if (!canManagePayments(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
+      if (!paymentId) return createErrorResponse(400, "Payment id is required");
+      if (!canManagePayments(userContext)) return createErrorResponse(403, "Access denied");
+
       const body = parseJsonBody(event);
-      const coll = await getCollection();
-      const payment = await getPaymentDocument(coll, paymentId);
-      if (!payment) {
-        return createErrorResponse(404, "Payment not found");
+      const existing = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" }
+      }));
+      if (!existing.Item || existing.Item.isDeleted) return createErrorResponse(404, "Payment record not found");
+
+      const payment = existing.Item;
+      const now = new Date().toISOString();
+      const updates = [];
+      const exprValues = { ":now": now, ":uid": userContext.userId };
+
+      if (body.paymentStatus !== undefined) {
+        updates.push("paymentStatus = :status");
+        exprValues[":status"] = body.paymentStatus;
       }
-      const updatePayload = {
-        ...(body.amount !== undefined ? { amount: Number(body.amount) } : {}),
-        ...(body.currency !== undefined ? { currency: body.currency } : {}),
-        ...(body.paymentMethod !== undefined ? { paymentMethod: body.paymentMethod } : {}),
-        ...(body.paymentStatus !== undefined ? { paymentStatus: body.paymentStatus } : {}),
-        ...(body.transactionReference !== undefined ? { transactionReference: body.transactionReference } : {}),
-        ...updateAuditFields(userContext.userId),
-      };
-      if (Object.keys(updatePayload).length <= 1) {
-        return createErrorResponse(400, "At least one updatable field is required");
+      if (body.transactionReference !== undefined) {
+        updates.push("transactionReference = :ref");
+        exprValues[":ref"] = body.transactionReference;
       }
-      await coll.updateOne({ PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" }, { $set: updatePayload });
+
+      if (updates.length === 0) return createErrorResponse(400, "No updatable fields provided");
+      const exprString = `SET ${updates.join(", ")}, updatedAt = :now, updatedBy = :uid`;
+
       if (body.paymentStatus === PAYMENT_STATUS.PAID) {
-        await updateOrderPaymentStatus(coll, payment.orderId, PAYMENT_STATUS.PAID);
+        // Execute an atomic cross-domain status cascade transaction
+        await docClient.send(new TransactWriteItemsCommand({
+          TransactItems: [
+            {
+              Update: {
+                TableName: tableName,
+                Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" },
+                UpdateExpression: exprString,
+                ExpressionAttributeValues: exprValues
+              }
+            },
+            {
+              Update: {
+                TableName: tableName,
+                Key: { PK: `ORDER#${payment.orderId}`, SK: "METADATA" },
+                UpdateExpression: "SET paymentStatus = :status, updatedAt = :now",
+                ExpressionAttributeValues: { ":status": PAYMENT_STATUS.PAID, ":now": now }
+              }
+            }
+          ]
+        }));
+      } else {
+        await docClient.send(new UpdateCommand({
+          TableName: tableName,
+          Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" },
+          UpdateExpression: exprString,
+          ExpressionAttributeValues: exprValues
+        }));
       }
-      return buildResponse(200, { payment: buildPaymentResponse({ ...payment, ...updatePayload }) });
+
+      return buildResponse(200, { message: "Payment status processed successfully" });
     }
 
-    if (method === "DELETE" && path.startsWith("/payments/")) {
-      const paymentId = getPathParam(event, 1);
-      if (!paymentId) {
-        return createErrorResponse(400, "Payment id is required");
-      }
-      if (!canManagePayments(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
-      const coll = await getCollection();
-      const payment = await getPaymentDocument(coll, paymentId);
-      if (!payment) {
-        return createErrorResponse(404, "Payment not found");
-      }
-      await coll.updateOne(
-        { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" },
-        { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: userContext.userId, updatedAt: new Date(), updatedBy: userContext.userId } }
-      );
-      return buildResponse(200, { message: "Payment marked deleted" });
-    }
-
+    // ------------------------------------------
+    // POST /payments/intent (Create Checkout Intent)
+    // ------------------------------------------
     if (method === "POST" && path === "/payments/intent") {
-      if (!userContext.isAuthenticated) {
-        return createErrorResponse(403, "Authentication required");
-      }
+      if (!userContext.isAuthenticated) return createErrorResponse(403, "Authentication required");
+
       const body = parseJsonBody(event);
       const orderId = body.orderId || body.order_id;
-      if (!orderId) {
-        return createErrorResponse(422, "orderId is required");
-      }
-      const coll = await getCollection();
-      const order = await coll.findOne({ PK: `ORDER#${orderId}`, SK: "METADATA" }, { projection: { _id: 0 } });
-      if (!order) {
-        return createErrorResponse(404, "Order not found");
-      }
-      const intent = {
+      if (!orderId) return createErrorResponse(422, "orderId is required");
+
+      const orderRes = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
+      }));
+      if (!orderRes.Item || orderRes.Item.isDeleted) return createErrorResponse(404, "Target checkout order missing");
+
+      return buildResponse(201, {
         paymentId: randomUUID(),
         orderId,
-        amount: order.totalAmount,
+        amount: orderRes.Item.totalAmount,
         currency: "USD",
         paymentStatus: PAYMENT_STATUS.PENDING,
         clientSecret: `pi_test_${orderId}_secret`,
-      };
-      return buildResponse(201, intent);
+      });
     }
 
-    if (method === "POST" && path === "/payments/verify") {
-      if (!userContext.isAuthenticated) {
-        return createErrorResponse(403, "Authentication required");
-      }
-      const body = parseJsonBody(event);
-      const orderId = body.orderId || body.order_id;
-      if (!orderId) {
-        return createErrorResponse(422, "orderId is required");
-      }
-      const coll = await getCollection();
-      const order = await coll.findOne({ PK: `ORDER#${orderId}`, SK: "METADATA" }, { projection: { _id: 0 } });
-      if (!order) {
-        return createErrorResponse(404, "Order not found");
-      }
-      const paymentStatus = body.paymentStatus || PAYMENT_STATUS.AUTHORIZED;
-      await coll.updateOne({ PK: `ORDER#${orderId}`, SK: "METADATA" }, { $set: { paymentStatus, updatedAt: new Date() } });
-      return buildResponse(200, { orderId, paymentStatus });
-    }
-
-    if (method === "POST" && path === "/payments/capture") {
-      if (!canManagePayments(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
-      const body = parseJsonBody(event);
-      const paymentId = body.paymentId || body.payment_id;
-      if (!paymentId) {
-        return createErrorResponse(422, "paymentId is required");
-      }
-      const coll = await getCollection();
-      const payment = await getPaymentDocument(coll, paymentId);
-      if (!payment) {
-        return createErrorResponse(404, "Payment not found");
-      }
-      await coll.updateOne({ PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" }, { $set: { paymentStatus: PAYMENT_STATUS.CAPTURED, updatedAt: new Date(), updatedBy: userContext.userId } });
-      await updateOrderPaymentStatus(coll, payment.orderId, PAYMENT_STATUS.CAPTURED);
-      return buildResponse(200, { paymentId, paymentStatus: PAYMENT_STATUS.CAPTURED });
-    }
-
+    // ------------------------------------------
+    // POST /payments/refund (Issue Balance Refund)
+    // ------------------------------------------
     if (method === "POST" && path === "/payments/refund") {
-      if (!canManagePayments(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
+      if (!canManagePayments(userContext)) return createErrorResponse(403, "Access denied");
+
       const body = parseJsonBody(event);
       const paymentId = body.paymentId || body.payment_id;
-      const refundAmount = Number(body.refundAmount ?? body.refund_amount ?? 0);
-      if (!paymentId) {
-        return createErrorResponse(422, "paymentId is required");
-      }
-      if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
-        return createErrorResponse(422, "refundAmount must be a positive number");
-      }
-      const coll = await getCollection();
-      const payment = await getPaymentDocument(coll, paymentId);
-      if (!payment) {
-        return createErrorResponse(404, "Payment not found");
-      }
-      await coll.updateOne({ PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" }, { $set: { paymentStatus: PAYMENT_STATUS.REFUNDED, updatedAt: new Date(), updatedBy: userContext.userId, refundAmount, refundReason: body.refundReason || body.refund_reason || null, refundedAt: new Date(), refundedBy: userContext.userId } });
-      await updateOrderPaymentStatus(coll, payment.orderId, PAYMENT_STATUS.REFUNDED);
+      const refundAmount = Number(body.refundAmount ?? 0);
+
+      if (!paymentId || refundAmount <= 0) return createErrorResponse(422, "Valid paymentId and positive refundAmount are required");
+
+      const paymentRes = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" }
+      }));
+      if (!paymentRes.Item || paymentRes.Item.isDeleted) return createErrorResponse(404, "Payment mapping record not found");
+
+      const payment = paymentRes.Item;
+      const now = new Date().toISOString();
+
+      await docClient.send(new TransactWriteItemsCommand({
+        TransactItems: [
+          {
+            Update: {
+              TableName: tableName,
+              Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" },
+              UpdateExpression: "SET paymentStatus = :ps, refundAmount = :ra, refundedAt = :now, refundedBy = :uid, updatedAt = :now, updatedBy = :uid",
+              ExpressionAttributeValues: { ":ps": PAYMENT_STATUS.REFUNDED, ":ra": refundAmount, ":now": now, ":uid": userContext.userId }
+            }
+          },
+          {
+            Update: {
+              TableName: tableName,
+              Key: { PK: `ORDER#${payment.orderId}`, SK: "METADATA" },
+              UpdateExpression: "SET paymentStatus = :ps, updatedAt = :now",
+              ExpressionAttributeValues: { ":ps": PAYMENT_STATUS.REFUNDED, ":now": now }
+            }
+          }
+        ]
+      }));
+
       return buildResponse(200, { paymentId, paymentStatus: PAYMENT_STATUS.REFUNDED, refundAmount });
     }
 
-    if (method === "POST" && path === "/payments/cancel") {
-      if (!canManagePayments(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
-      const body = parseJsonBody(event);
-      const paymentId = body.paymentId || body.payment_id;
-      if (!paymentId) {
-        return createErrorResponse(422, "paymentId is required");
-      }
-      const coll = await getCollection();
-      const payment = await getPaymentDocument(coll, paymentId);
-      if (!payment) {
-        return createErrorResponse(404, "Payment not found");
-      }
-      await coll.updateOne({ PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" }, { $set: { paymentStatus: PAYMENT_STATUS.CANCELLED, updatedAt: new Date(), updatedBy: userContext.userId } });
-      await updateOrderPaymentStatus(coll, payment.orderId, PAYMENT_STATUS.CANCELLED);
-      return buildResponse(200, { paymentId, paymentStatus: PAYMENT_STATUS.CANCELLED });
-    }
-
-    if (method === "POST" && path === "/payments/webhook") {
-      const body = parseJsonBody(event);
-      if (!validateWebhookPayload(body)) {
-        return createErrorResponse(403, "Invalid webhook payload");
-      }
-      const coll = await getCollection();
-      const orderId = body.orderId || body.order_id;
-      if (!orderId) {
-        return createErrorResponse(422, "orderId is required");
-      }
-      if (body.event === "payment_intent.succeeded" || body.event === "payment_intent.completed") {
-        await coll.updateOne({ PK: `ORDER#${orderId}`, SK: "METADATA" }, { $set: { paymentStatus: PAYMENT_STATUS.PAID, updatedAt: new Date() } });
-      }
-      return buildResponse(200, { received: true });
-    }
-
+    // ------------------------------------------
+    // POST /payments/po-verify (Purchase Order Authorization)
+    // ------------------------------------------
     if (method === "POST" && path === "/payments/po-verify") {
       if (!userContext.isBusiness && !userContext.isAdmin) {
-        return createErrorResponse(403, "Only business or admins can verify purchase orders");
+        return createErrorResponse(403, "Only business accounts or admins can verify purchase orders");
       }
+
       const body = parseJsonBody(event);
       const orderId = body.orderId || body.order_id;
-      if (!orderId) {
-        return createErrorResponse(422, "orderId is required");
+      if (!orderId) return createErrorResponse(422, "orderId parameter required");
+
+      const orderRes = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
+      }));
+      if (!orderRes.Item || orderRes.Item.isDeleted) return createErrorResponse(404, "Associated purchase order missing");
+
+      const order = orderRes.Item;
+      const safetyMargin = Number(body.creditSafetyMargin || 0.1);
+      const creditLimit = Number(userContext.creditLimit || 0);
+      const outstanding = Number(body.outstandingInvoices || 0);
+      const utilization = Number(body.creditUtilization || 0);
+
+      const withinCreditEnvelope = Number(order.totalAmount) <= (creditLimit * (1 - safetyMargin)) - outstanding - utilization;
+      if (!withinCreditEnvelope) {
+        return createErrorResponse(422, "Purchase order exceeds approved corporate credit limits");
       }
-      const coll = await getCollection();
-      const verification = await verifyPurchaseOrder(coll, orderId, userContext, body);
-      if (verification.error) {
-        return verification.error;
-      }
-      await coll.updateOne({ PK: `ORDER#${orderId}`, SK: "METADATA" }, { $set: { paymentStatus: PAYMENT_STATUS.PAID, updatedAt: new Date() } });
+
+      const now = new Date().toISOString();
+      await docClient.send(new UpdateCommand({
+        TableName: tableName,
+        Key: { PK: `ORDER#${orderId}`, SK: "METADATA" },
+        UpdateExpression: "SET paymentStatus = :ps, updatedAt = :now",
+        ExpressionAttributeValues: { ":ps": PAYMENT_STATUS.PAID, ":now": now }
+      }));
+
       return buildResponse(200, { orderId, paymentStatus: PAYMENT_STATUS.PAID });
     }
 
-    return createErrorResponse(404, "Route not found");
+    return createErrorResponse(404, "Routing path destination matching unresolvable");
   } catch (error) {
-    return createErrorResponse(500, "Unexpected payments service error", error.message);
+    console.error("[Payments Service Fatal Exception]", error);
+    return createErrorResponse(500, "Internal downstream payment service routing execution exception", error.message);
   }
 };

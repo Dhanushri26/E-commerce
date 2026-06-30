@@ -1,507 +1,339 @@
 import { randomUUID } from "node:crypto";
 import {
+  GetCommand,
+  QueryCommand,
+  PutCommand,
+  UpdateCommand
+} from "@aws-sdk/lib-dynamodb";
+import {
   buildResponse,
   createErrorResponse,
   extractUserContext,
-  getCollection,
+  getDbClient,
   getPathParam,
   parseJsonBody,
   createAuditFields,
   updateAuditFields,
-  ORDER_STATUS,
 } from "./shared.js";
 
-const activeInventoryFilter = (extra = {}) => ({
-  SK: "STOCK",
-  isDeleted: { $ne: true },
-  ...extra,
-});
+const normalizeQuantity = (v) => {
+  const parsed = Number(v ?? 0);
+  return Number.isFinite(parsed) ? Math.floor(parsed) : 0;
+};
 
-const normalizeQuantity = (value) => Number(value ?? 0);
 const DEFAULT_INITIAL_INVENTORY_QUANTITY = 10;
 
-const readInventoryByProduct = async (coll, productId) => {
-  if (!productId) {
-    return null;
-  }
+// ==========================================
+// BUSINESS LOGIC & PERMISSION DOMAINS
+// ==========================================
+const canManageInventory = (user) => user.isAdmin;
+const canReserveInventory = (user) => user.isAdmin || user.isBusiness;
+const canReadInventory = (user) => user.isAdmin || user.isBusiness || user.isCustomer;
 
-  return coll.findOne(activeInventoryFilter({ PK: `INVENTORY#${productId}` }), { projection: { _id: 0 } });
-};
-
-const buildInventoryResponse = (inventory) => ({
-  ...inventory,
-  availableQuantity: Number(inventory?.availableQuantity ?? inventory?.available_quantity ?? 0),
-  reservedQuantity: Number(inventory?.reservedQuantity ?? inventory?.reserved_quantity ?? 0),
-  damagedQuantity: Number(inventory?.damagedQuantity ?? inventory?.damaged_quantity ?? 0),
-  reorderThreshold: Number(inventory?.reorderThreshold ?? inventory?.reorder_threshold ?? 0),
+const buildInventoryResponse = (item) => ({
+  ...item,
+  availableQuantity: Number(item?.availableQuantity ?? 0),
+  reservedQuantity: Number(item?.reservedQuantity ?? 0),
+  damagedQuantity: Number(item?.damagedQuantity ?? 0),
+  reorderThreshold: Number(item?.reorderThreshold ?? 0),
 });
 
-export const buildInventoryDocument = (productId, body = {}, userContext = {}) => {
-  const availableQuantity = normalizeQuantity(
-    body.availableQuantity ?? body.available_quantity ?? body.initialInventoryQuantity ?? body.initial_inventory_quantity ?? DEFAULT_INITIAL_INVENTORY_QUANTITY
-  );
-
-  return {
+// Helper to push a discrete audit log line item
+const appendAuditRecord = async (docClient, tableName, productId, action, qty, userId, reason) => {
+  const now = new Date().toISOString();
+  const auditItem = {
     PK: `INVENTORY#${productId}`,
-    SK: "STOCK",
-    inventoryId: body.inventoryId || randomUUID(),
-    productId,
-    availableQuantity,
-    reservedQuantity: normalizeQuantity(body.reservedQuantity ?? body.reserved_quantity ?? 0),
-    damagedQuantity: normalizeQuantity(body.damagedQuantity ?? body.damaged_quantity ?? 0),
-    reorderThreshold: normalizeQuantity(body.reorderThreshold ?? body.reorder_threshold ?? 0),
-    warehouseId: body.warehouseId || null,
-    inventoryStatus: body.inventoryStatus || (availableQuantity > 0 ? "AVAILABLE" : "OUT_OF_STOCK"),
-    isDeleted: false,
-    deletedAt: null,
-    deletedBy: null,
-    reservationStatus: "AVAILABLE",
-    reservationTTL: null,
-    reservedBy: null,
-    reservedAt: null,
-    ...createAuditFields(userContext.userId || "system"),
-  };
-};
-
-export const ensureInventoryForProduct = async (coll, productId, body = {}, userContext = {}) => {
-  if (!productId) {
-    return null;
-  }
-
-  const existingInventory = await readInventoryByProduct(coll, productId);
-  if (existingInventory) {
-    return existingInventory;
-  }
-
-  const inventoryDoc = buildInventoryDocument(productId, body, userContext);
-  await coll.insertOne(inventoryDoc);
-  return inventoryDoc;
-};
-
-const canManageInventory = (userContext) => userContext.isAdmin;
-const canReserveInventory = (userContext) => userContext.isAdmin || userContext.isBusiness;
-const canReadInventory = (userContext) => userContext.isAdmin || userContext.isBusiness || userContext.isCustomer;
-
-const validateInventoryPayload = (body) => {
-  const errors = [];
-  const availableQuantity = normalizeQuantity(body.availableQuantity ?? body.available_quantity);
-  const reservedQuantity = normalizeQuantity(body.reservedQuantity ?? body.reserved_quantity);
-  const damagedQuantity = normalizeQuantity(body.damagedQuantity ?? body.damaged_quantity);
-  const reorderThreshold = normalizeQuantity(body.reorderThreshold ?? body.reorder_threshold);
-
-  if (!Number.isFinite(availableQuantity) || availableQuantity < 0) {
-    errors.push("availableQuantity must be a non-negative number");
-  }
-  if (!Number.isFinite(reservedQuantity) || reservedQuantity < 0) {
-    errors.push("reservedQuantity must be a non-negative number");
-  }
-  if (!Number.isFinite(damagedQuantity) || damagedQuantity < 0) {
-    errors.push("damagedQuantity must be a non-negative number");
-  }
-  if (!Number.isFinite(reorderThreshold) || reorderThreshold < 0) {
-    errors.push("reorderThreshold must be a non-negative number");
-  }
-
-  if (typeof body.productId !== "string" || !body.productId.trim()) {
-    errors.push("productId is required");
-  }
-
-  if (body.inventoryStatus && typeof body.inventoryStatus !== "string") {
-    errors.push("inventoryStatus must be a string");
-  }
-
-  return errors;
-};
-
-const appendAuditEntry = async (coll, inventoryId, action, quantity, performedBy, reason = null) => {
-  const auditEntry = {
+    SK: `AUDIT#${now}#${randomUUID().substring(0, 8)}`,
     action,
-    quantity,
-    performedBy,
-    timestamp: new Date(),
-    reason,
+    quantity: qty,
+    performedBy: userId,
+    timestamp: now,
+    reason: reason || "Manual Inventory Operation Update"
   };
-
-  await coll.updateOne(
-    { PK: `INVENTORY#${inventoryId}`, SK: "AUDIT" },
-    { $push: { entries: auditEntry } },
-    { upsert: true }
-  );
+  await docClient.send(new PutCommand({ TableName: tableName, Item: auditItem }));
 };
 
-const expireReservations = async (coll) => {
-  await coll.updateMany(
-    activeInventoryFilter({ reservationStatus: "RESERVED", reservationTTL: { $lte: new Date() } }),
-    {
-      $set: {
-        reservationStatus: "AVAILABLE",
-        reservationTTL: null,
-        reservedBy: null,
-        reservedAt: null,
-        updatedAt: new Date(),
-      },
-    }
-  );
-};
-
+// ==========================================
+// MAIN AWS LAMBDA HANDLER
+// ==========================================
 export const handler = async (event) => {
   try {
-    const method = event?.httpMethod || event?.requestContext?.httpMethod;
+    const method = event?.httpMethod || event?.requestContext?.httpMethod || event?.requestContext?.http?.method;
     const path = event?.rawPath || event?.path || "";
     const userContext = extractUserContext(event);
+    const { docClient, tableName } = getDbClient();
 
+    if (!canReadInventory(userContext)) {
+      return createErrorResponse(403, "Access unauthorized");
+    }
+
+    // ------------------------------------------
+    // GET /inventory (List Stock Profiles)
+    // ------------------------------------------
     if (method === "GET" && (path === "/inventory" || path === "/inventory/")) {
-      if (!canReadInventory(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
+      const result = await docClient.send(new QueryCommand({
+        TableName: tableName,
+        IndexName: "SK-PK-Index", // Assuming global index on sort key partitions
+        KeyConditionExpression: "SK = :sk",
+        FilterExpression: "attribute_not_exists(isDeleted)",
+        ExpressionAttributeValues: { ":sk": "STOCK" }
+      }));
 
-      const coll = await getCollection();
-      await expireReservations(coll);
-      const inventoryItems = await coll.find(activeInventoryFilter()).project({ _id: 0 }).toArray();
-      const uniqueProductIds = new Set(
-        inventoryItems.map((item) => item.productId || item.product_id || item.PK?.replace(/^INVENTORY#/, "")).filter(Boolean)
-      );
-
+      const items = result.Items || [];
       return buildResponse(200, {
-        totalProducts: uniqueProductIds.size,
-        items: inventoryItems.map(buildInventoryResponse),
+        totalProducts: items.length,
+        items: items.map(buildInventoryResponse),
       });
     }
 
+    // ------------------------------------------
+    // GET /inventory/{productId} (Inspect Details)
+    // ------------------------------------------
     if (method === "GET" && path.startsWith("/inventory/")) {
       const productId = getPathParam(event, 1);
-      if (!productId) {
-        return createErrorResponse(400, "Product id is required");
-      }
+      if (!productId) return createErrorResponse(400, "Product specification parameter missing");
 
-      if (!canReadInventory(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
+      const res = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" }
+      }));
 
-      const coll = await getCollection();
-      await expireReservations(coll);
-      const inventory = await readInventoryByProduct(coll, productId);
-      if (!inventory) {
-        return createErrorResponse(404, "Inventory not found");
-      }
+      const inventory = res.Item;
+      if (!inventory || inventory.isDeleted) return createErrorResponse(404, "Stock profile not found");
 
       return buildResponse(200, buildInventoryResponse(inventory));
     }
 
+    // ------------------------------------------
+    // POST /inventory (Initialize Inventory Node)
+    // ------------------------------------------
     if (method === "POST" && path === "/inventory") {
-      if (!canManageInventory(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
+      if (!canManageInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
 
       const body = parseJsonBody(event);
-      const validationErrors = validateInventoryPayload(body);
-      if (validationErrors.length > 0) {
-        return createErrorResponse(422, "Validation failed", { errors: validationErrors });
-      }
+      const productId = typeof body.productId === "string" ? body.productId.trim() : null;
+      if (!productId) return createErrorResponse(422, "Valid productId missing from body payload");
 
-      const coll = await getCollection();
-      const productId = body.productId.trim();
-      const existingProduct = await coll.findOne({ PK: `PRODUCT#${productId}`, SK: "METADATA", isDeleted: { $ne: true } }, { projection: { _id: 0 } });
-      if (!existingProduct) {
-        return createErrorResponse(404, "Product not found");
-      }
+      // Verify Product reference entity existence directly inside the catalog domain prefix
+      const prodRes = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `PRODUCT#${productId}`, SK: "METADATA" }
+      }));
+      if (!prodRes.Item || prodRes.Item.isDeleted) return createErrorResponse(404, "Base product reference mapping missing");
 
-      const existingInventory = await readInventoryByProduct(coll, productId);
-      if (existingInventory) {
-        return createErrorResponse(409, "Inventory already exists for this product");
-      }
+      // Verify uniqueness of the stock record
+      const existRes = await docClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" }
+      }));
+      if (existRes.Item && !existRes.Item.isDeleted) return createErrorResponse(409, "Inventory record context collision");
 
-      const inventoryDoc = buildInventoryDocument(productId, body, userContext);
+      const availableQuantity = normalizeQuantity(body.availableQuantity ?? body.initialInventoryQuantity ?? DEFAULT_INITIAL_INVENTORY_QUANTITY);
+      const now = new Date().toISOString();
 
-      await coll.insertOne(inventoryDoc);
+      const inventoryDoc = {
+        PK: `INVENTORY#${productId}`,
+        SK: "STOCK",
+        inventoryId: body.inventoryId || randomUUID(),
+        productId,
+        availableQuantity,
+        reservedQuantity: normalizeQuantity(body.reservedQuantity),
+        damagedQuantity: normalizeQuantity(body.damagedQuantity),
+        reorderThreshold: normalizeQuantity(body.reorderThreshold),
+        warehouseId: body.warehouseId || null,
+        inventoryStatus: body.inventoryStatus || (availableQuantity > 0 ? "AVAILABLE" : "OUT_OF_STOCK"),
+        isDeleted: false,
+        createdAt: now,
+        updatedAt: now,
+        ...createAuditFields(userContext.userId || "system")
+      };
+
+      await docClient.send(new PutCommand({ TableName: tableName, Item: inventoryDoc }));
       return buildResponse(201, buildInventoryResponse(inventoryDoc));
     }
 
+    // ------------------------------------------
+    // PUT /inventory/{productId} (Update Fields)
+    // ------------------------------------------
     if (method === "PUT" && path.startsWith("/inventory/")) {
       const productId = getPathParam(event, 1);
-      if (!productId) {
-        return createErrorResponse(400, "Product id is required");
-      }
-
-      if (!canManageInventory(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
+      if (!productId) return createErrorResponse(400, "Product specification missing");
+      if (!canManageInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
 
       const body = parseJsonBody(event);
-      const coll = await getCollection();
-      const inventory = await readInventoryByProduct(coll, productId);
-      if (!inventory) {
-        return createErrorResponse(404, "Inventory not found");
+      const updateExpressions = [];
+      const expressionAttributeValues = { ":now": new Date().toISOString() };
+
+      if (body.availableQuantity !== undefined) {
+        updateExpressions.push("availableQuantity = :aq");
+        expressionAttributeValues[":aq"] = normalizeQuantity(body.availableQuantity);
+      }
+      if (body.reservedQuantity !== undefined) {
+        updateExpressions.push("reservedQuantity = :rq");
+        expressionAttributeValues[":rq"] = normalizeQuantity(body.reservedQuantity);
+      }
+      if (body.damagedQuantity !== undefined) {
+        updateExpressions.push("damagedQuantity = :dq");
+        expressionAttributeValues[":dq"] = normalizeQuantity(body.damagedQuantity);
       }
 
-      const updatePayload = {
-        ...(body.availableQuantity !== undefined ? { availableQuantity: normalizeQuantity(body.availableQuantity) } : {}),
-        ...(body.reservedQuantity !== undefined ? { reservedQuantity: normalizeQuantity(body.reservedQuantity) } : {}),
-        ...(body.damagedQuantity !== undefined ? { damagedQuantity: normalizeQuantity(body.damagedQuantity) } : {}),
-        ...(body.reorderThreshold !== undefined ? { reorderThreshold: normalizeQuantity(body.reorderThreshold) } : {}),
-        ...(body.warehouseId !== undefined ? { warehouseId: body.warehouseId } : {}),
-        ...(body.inventoryStatus !== undefined ? { inventoryStatus: body.inventoryStatus } : {}),
-        ...updateAuditFields(userContext.userId),
-      };
+      if (updateExpressions.length === 0) return createErrorResponse(400, "Updatable parameters missing");
 
-      if (Object.keys(updatePayload).length <= 1) {
-        return createErrorResponse(400, "At least one updatable field is required");
-      }
+      const expressionString = `SET ${updateExpressions.join(", ")}, updatedAt = :now`;
 
-      await coll.updateOne({ PK: `INVENTORY#${productId}`, SK: "STOCK" }, { $set: updatePayload });
-      const updatedInventory = await readInventoryByProduct(coll, productId);
-      return buildResponse(200, buildInventoryResponse(updatedInventory));
+      const result = await docClient.send(new UpdateCommand({
+        TableName: tableName,
+        Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
+        UpdateExpression: expressionString,
+        ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(isDeleted)",
+        ExpressionAttributeValues: expressionAttributeValues,
+        ReturnValues: "ALL_NEW"
+      }));
+
+      return buildResponse(200, buildInventoryResponse(result.Attributes));
     }
 
+    // ------------------------------------------
+    // PATCH /inventory/reserve (Allocate Hold)
+    // ------------------------------------------
+    if (method === "PATCH" && path === "/inventory/reserve") {
+      if (!canReserveInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
+
+      const body = parseJsonBody(event);
+      const requestedQuantity = normalizeQuantity(body.requestedQuantity);
+      const productId = body.productId || body.product_id;
+
+      if (!productId || requestedQuantity <= 0) {
+        return createErrorResponse(422, "Valid positive integer requestedQuantity and productId parameters required");
+      }
+
+      const now = new Date().toISOString();
+      const ttlOffset = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+      try {
+        const result = await docClient.send(new UpdateCommand({
+          TableName: tableName,
+          Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
+          UpdateExpression: "SET availableQuantity = availableQuantity - :req, reservedQuantity = reservedQuantity + :req, reservationStatus = :resStatus, reservationTTL = :ttl, reservedBy = :uid, reservedAt = :now, updatedAt = :now",
+          ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(isDeleted) AND availableQuantity >= :req",
+          ExpressionAttributeValues: {
+            ":req": requestedQuantity,
+            ":resStatus": "RESERVED",
+            ":ttl": ttlOffset,
+            ":uid": userContext.userId,
+            ":now": now
+          },
+          ReturnValues: "ALL_NEW"
+        }));
+
+        await appendAuditRecord(docClient, tableName, productId, "RESERVE", requestedQuantity, userContext.userId, body.reason);
+        return buildResponse(200, buildInventoryResponse(result.Attributes));
+      } catch (err) {
+        if (err.name === "ConditionalCheckFailedException") {
+          return createErrorResponse(409, "Allocation failure: Insufficient available stock inventory");
+        }
+        throw err;
+      }
+    }
+
+    // ------------------------------------------
+    // PATCH /inventory/release (Revert Reservation)
+    // ------------------------------------------
+    if (method === "PATCH" && path === "/inventory/release") {
+      if (!canReserveInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
+
+      const body = parseJsonBody(event);
+      const requestedQuantity = normalizeQuantity(body.requestedQuantity);
+      const productId = body.productId || body.product_id;
+
+      if (!productId || requestedQuantity <= 0) return createErrorResponse(422, "Invalid parameter constraints mapping");
+
+      const now = new Date().toISOString();
+
+      try {
+        const result = await docClient.send(new UpdateCommand({
+          TableName: tableName,
+          Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
+          UpdateExpression: "SET availableQuantity = availableQuantity + :req, reservedQuantity = reservedQuantity - :req, reservationStatus = :status, reservationTTL = :nullVal, updatedAt = :now",
+          ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(isDeleted) AND reservedQuantity >= :req",
+          ExpressionAttributeValues: {
+            ":req": requestedQuantity,
+            ":status": "AVAILABLE",
+            ":nullVal": null,
+            ":now": now
+          },
+          ReturnValues: "ALL_NEW"
+        }));
+
+        await appendAuditRecord(docClient, tableName, productId, "RELEASE", requestedQuantity, userContext.userId, body.reason);
+        return buildResponse(200, buildInventoryResponse(result.Attributes));
+      } catch (err) {
+        if (err.name === "ConditionalCheckFailedException") {
+          return createErrorResponse(409, "Reversion error: Requested release size exceeds current reserved quantities");
+        }
+        throw err;
+      }
+    }
+
+    // ------------------------------------------
+    // PATCH /inventory/commit (Deduct Stock)
+    // ------------------------------------------
+    if (method === "PATCH" && path === "/inventory/commit") {
+      if (!canReserveInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
+
+      const body = parseJsonBody(event);
+      const requestedQuantity = normalizeQuantity(body.requestedQuantity);
+      const productId = body.productId || body.product_id;
+
+      if (!productId || requestedQuantity <= 0) return createErrorResponse(422, "Invalid parameters constraints mapping");
+
+      const now = new Date().toISOString();
+
+      try {
+        const result = await docClient.send(new UpdateCommand({
+          TableName: tableName,
+          Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
+          UpdateExpression: "SET reservedQuantity = reservedQuantity - :req, reservationStatus = :status, updatedAt = :now",
+          ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(isDeleted) AND reservedQuantity >= :req",
+          ExpressionAttributeValues: {
+            ":req": requestedQuantity,
+            ":status": "COMMITTED",
+            ":now": now
+          },
+          ReturnValues: "ALL_NEW"
+        }));
+
+        await appendAuditRecord(docClient, tableName, productId, "COMMIT", requestedQuantity, userContext.userId, body.reason);
+        return buildResponse(200, buildInventoryResponse(result.Attributes));
+      } catch (err) {
+        if (err.name === "ConditionalCheckFailedException") {
+          return createErrorResponse(409, "Commit balance error: Target stock reservation parameters missing or insufficient");
+        }
+        throw err;
+      }
+    }
+
+    // ------------------------------------------
+    // DELETE /inventory/{productId} (Soft-Delete)
+    // ------------------------------------------
     if (method === "DELETE" && path.startsWith("/inventory/")) {
       const productId = getPathParam(event, 1);
-      if (!productId) {
-        return createErrorResponse(400, "Product id is required");
-      }
+      if (!productId) return createErrorResponse(400, "Product specification missing");
+      if (!canManageInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
 
-      if (!canManageInventory(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
+      await docClient.send(new UpdateCommand({
+        TableName: tableName,
+        Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
+        UpdateExpression: "SET isDeleted = :t, deletedAt = :now, deletedBy = :uid, updatedAt = :now",
+        ExpressionAttributeValues: { ":t": true, ":now": new Date().toISOString(), ":uid": userContext.userId }
+      }));
 
-      const coll = await getCollection();
-      const inventory = await readInventoryByProduct(coll, productId);
-      if (!inventory) {
-        return createErrorResponse(404, "Inventory not found");
-      }
-
-      await coll.updateOne(
-        { PK: `INVENTORY#${productId}`, SK: "STOCK" },
-        {
-          $set: {
-            isDeleted: true,
-            deletedAt: new Date(),
-            deletedBy: userContext.userId,
-            updatedAt: new Date(),
-            updatedBy: userContext.userId,
-          },
-        }
-      );
-
-      return buildResponse(200, { message: "Inventory marked deleted" });
+      return buildResponse(200, { message: "Inventory stock profile soft-deleted successfully" });
     }
 
-    if (method === "PATCH" && path === "/inventory/reserve") {
-      if (!canReserveInventory(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
-
-      const body = parseJsonBody(event);
-      const requestedQuantity = Number(body.requestedQuantity ?? body.requested_quantity ?? 0);
-      if (!Number.isInteger(requestedQuantity) || requestedQuantity <= 0) {
-        return createErrorResponse(422, "requestedQuantity must be a positive integer");
-      }
-
-      const productId = body.productId || body.product_id;
-      if (!productId) {
-        return createErrorResponse(422, "productId is required");
-      }
-
-      const coll = await getCollection();
-      const inventory = await readInventoryByProduct(coll, productId);
-      if (!inventory) {
-        return createErrorResponse(404, "Inventory not found");
-      }
-
-      if (inventory.isDeleted) {
-        return createErrorResponse(404, "Inventory not found");
-      }
-
-      const availableQuantity = Number(inventory.availableQuantity ?? inventory.available_quantity ?? 0);
-      if (!Number.isFinite(availableQuantity) || availableQuantity < requestedQuantity) {
-        return createErrorResponse(409, "Insufficient inventory available");
-      }
-
-      const reservationTTL = new Date(Date.now() + 15 * 60 * 1000);
-      const result = await coll.updateOne(
-        {
-          PK: `INVENTORY#${productId}`,
-          SK: "STOCK",
-          availableQuantity: { $gte: requestedQuantity },
-          isDeleted: { $ne: true },
-        },
-        {
-          $inc: {
-            availableQuantity: -requestedQuantity,
-            reservedQuantity: requestedQuantity,
-          },
-          $set: {
-            reservationStatus: "RESERVED",
-            reservationTTL,
-            reservedBy: userContext.userId,
-            reservedAt: new Date(),
-            updatedAt: new Date(),
-            updatedBy: userContext.userId,
-          },
-        }
-      );
-
-      if (result.matchedCount === 0 || result.modifiedCount === 0) {
-        return createErrorResponse(409, "Inventory could not be reserved");
-      }
-
-      const updatedInventory = await readInventoryByProduct(coll, productId);
-      await appendAuditEntry(coll, productId, "RESERVE", requestedQuantity, userContext.userId, "Inventory reservation");
-      return buildResponse(200, buildInventoryResponse(updatedInventory));
-    }
-
-    if (method === "PATCH" && path === "/inventory/release") {
-      if (!canReserveInventory(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
-
-      const body = parseJsonBody(event);
-      const requestedQuantity = Number(body.requestedQuantity ?? body.requested_quantity ?? 0);
-      if (!Number.isInteger(requestedQuantity) || requestedQuantity <= 0) {
-        return createErrorResponse(422, "requestedQuantity must be a positive integer");
-      }
-
-      const productId = body.productId || body.product_id;
-      if (!productId) {
-        return createErrorResponse(422, "productId is required");
-      }
-
-      const coll = await getCollection();
-      const inventory = await readInventoryByProduct(coll, productId);
-      if (!inventory) {
-        return createErrorResponse(404, "Inventory not found");
-      }
-
-      const reservedQuantity = Number(inventory.reservedQuantity ?? inventory.reserved_quantity ?? 0);
-      if (reservedQuantity < requestedQuantity) {
-        return createErrorResponse(409, "Reserved quantity is insufficient");
-      }
-
-      const result = await coll.updateOne(
-        { PK: `INVENTORY#${productId}`, SK: "STOCK", isDeleted: { $ne: true } },
-        {
-          $inc: {
-            availableQuantity: requestedQuantity,
-            reservedQuantity: -requestedQuantity,
-          },
-          $set: {
-            reservationStatus: "AVAILABLE",
-            reservationTTL: null,
-            reservedBy: null,
-            reservedAt: null,
-            updatedAt: new Date(),
-            updatedBy: userContext.userId,
-          },
-        }
-      );
-
-      if (result.matchedCount === 0 || result.modifiedCount === 0) {
-        return createErrorResponse(409, "Inventory could not be released");
-      }
-
-      const updatedInventory = await readInventoryByProduct(coll, productId);
-      await appendAuditEntry(coll, productId, "RELEASE", requestedQuantity, userContext.userId, "Inventory release");
-      return buildResponse(200, buildInventoryResponse(updatedInventory));
-    }
-
-    if (method === "PATCH" && path === "/inventory/commit") {
-      if (!canReserveInventory(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
-
-      const body = parseJsonBody(event);
-      const requestedQuantity = Number(body.requestedQuantity ?? body.requested_quantity ?? 0);
-      if (!Number.isInteger(requestedQuantity) || requestedQuantity <= 0) {
-        return createErrorResponse(422, "requestedQuantity must be a positive integer");
-      }
-
-      const productId = body.productId || body.product_id;
-      if (!productId) {
-        return createErrorResponse(422, "productId is required");
-      }
-
-      const coll = await getCollection();
-      const inventory = await readInventoryByProduct(coll, productId);
-      if (!inventory) {
-        return createErrorResponse(404, "Inventory not found");
-      }
-
-      const reservedQuantity = Number(inventory.reservedQuantity ?? inventory.reserved_quantity ?? 0);
-      if (reservedQuantity < requestedQuantity) {
-        return createErrorResponse(409, "Reserved quantity is insufficient");
-      }
-
-      const result = await coll.updateOne(
-        { PK: `INVENTORY#${productId}`, SK: "STOCK", isDeleted: { $ne: true } },
-        {
-          $inc: {
-            reservedQuantity: -requestedQuantity,
-          },
-          $set: {
-            reservationStatus: "COMMITTED",
-            reservationTTL: null,
-            reservedBy: null,
-            reservedAt: null,
-            updatedAt: new Date(),
-            updatedBy: userContext.userId,
-          },
-        }
-      );
-
-      if (result.matchedCount === 0 || result.modifiedCount === 0) {
-        return createErrorResponse(409, "Inventory could not be committed");
-      }
-
-      await appendAuditEntry(coll, productId, "COMMIT", requestedQuantity, userContext.userId, "Inventory commit");
-      const updatedInventory = await readInventoryByProduct(coll, productId);
-      return buildResponse(200, buildInventoryResponse(updatedInventory));
-    }
-
-    if (method === "PATCH" && path.startsWith("/inventory/") && path.endsWith("/adjust")) {
-      if (!canManageInventory(userContext)) {
-        return createErrorResponse(403, "Access denied");
-      }
-
-      const productId = getPathParam(event, 1);
-      if (!productId) {
-        return createErrorResponse(400, "Product id is required");
-      }
-
-      const body = parseJsonBody(event);
-      const adjustment = Number(body.adjustment ?? body.quantity ?? 0);
-      if (!Number.isFinite(adjustment)) {
-        return createErrorResponse(422, "adjustment must be a number");
-      }
-
-      const coll = await getCollection();
-      const inventory = await readInventoryByProduct(coll, productId);
-      if (!inventory) {
-        return createErrorResponse(404, "Inventory not found");
-      }
-
-      const nextAvailableQuantity = Number(inventory.availableQuantity ?? inventory.available_quantity ?? 0) + adjustment;
-      if (nextAvailableQuantity < 0) {
-        return createErrorResponse(409, "Adjustment would make available quantity negative");
-      }
-
-      await coll.updateOne(
-        { PK: `INVENTORY#${productId}`, SK: "STOCK" },
-        {
-          $set: {
-            availableQuantity: nextAvailableQuantity,
-            inventoryStatus: body.inventoryStatus || inventory.inventoryStatus || "AVAILABLE",
-            updatedAt: new Date(),
-            updatedBy: userContext.userId,
-          },
-        }
-      );
-
-      await appendAuditEntry(coll, productId, "ADJUST", adjustment, userContext.userId, body.reason || "Manual adjustment");
-      const updatedInventory = await readInventoryByProduct(coll, productId);
-      return buildResponse(200, buildInventoryResponse(updatedInventory));
-    }
-
-    return createErrorResponse(404, "Route not found");
+    return createErrorResponse(404, "Routing match point unresolvable");
   } catch (error) {
-    return createErrorResponse(500, "Unexpected inventory service error", error.message);
+    console.error("[Inventory Service Error]", error);
+    return createErrorResponse(500, "Downstream serverless inventory execution fault", error.message);
   }
 };
