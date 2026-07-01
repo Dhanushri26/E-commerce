@@ -188,7 +188,7 @@ export const handler = async (event) => {
         TableName: tableName,
         Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
         UpdateExpression: expressionString,
-        ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(isDeleted)",
+        ConditionExpression: "attribute_exists(PK) AND isDeleted = :deleted",
         ExpressionAttributeValues: expressionAttributeValues,
         ReturnValues: "ALL_NEW"
       }));
