@@ -21,11 +21,9 @@ import {
   updateAuditFields,
 } from "./shared.js";
 
-
 import {
-  TransactWriteItemsCommand
-} from "@aws-sdk/client-dynamodb";
-
+  TransactWriteCommand
+} from "@aws-sdk/lib-dynamodb";
 
 // ==========================================
 // BUSINESS LOGIC & COMPLIANCE FILTERS
@@ -249,8 +247,11 @@ export const handler = async (event) => {
           });
         }
 
-        // Atomic multi-entity structural transaction
-        await docClient.send(new TransactWriteItemsCommand({ TransactItems: transactItems }));
+       await docClient.send(
+    new TransactWriteCommand({
+        TransactItems: transactItems
+    })
+);
 
         const responsePayload = { order: buildOrderResponse(orderDoc) };
         await releaseOrResolveLock(idempotencyKey, responsePayload);
@@ -321,7 +322,11 @@ export const handler = async (event) => {
           });
         }
 
-        await docClient.send(new TransactWriteItemsCommand({ TransactItems: transactUpdates }));
+        await docClient.send(
+    new TransactWriteCommand({
+        TransactItems: transactUpdates
+    })
+);
         return buildResponse(200, { message: "Order cancellation processing successfully performed" });
       }
 
@@ -403,7 +408,11 @@ export const handler = async (event) => {
         });
       }
 
-      await docClient.send(new TransactWriteItemsCommand({ TransactItems: transactDeletes }));
+      await docClient.send(
+    new TransactWriteCommand({
+        TransactItems: transactDeletes
+    })
+);
       return buildResponse(200, { message: "Order trace elements successfully purged" });
     }
 

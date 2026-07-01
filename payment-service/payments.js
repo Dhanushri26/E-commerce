@@ -4,12 +4,9 @@ import {
   QueryCommand,
   PutCommand,
   UpdateCommand,
-  ScanCommand
+  ScanCommand,
+  TransactWriteCommand
 } from "@aws-sdk/lib-dynamodb";
-
-import {
-  TransactWriteItemsCommand
-} from "@aws-sdk/client-dynamodb";
 
 
 import {
@@ -108,11 +105,12 @@ export const handler = async (event) => {
        const result = await docClient.send(
   new ScanCommand({
     TableName: tableName,
-    FilterExpression:
-      "SK = :sk AND attribute_not_exists(isDeleted)",
-    ExpressionAttributeValues: {
-      ":sk": "PAYMENT"
-    }
+   FilterExpression:
+"SK = :sk AND isDeleted = :deleted",
+ExpressionAttributeValues: {
+    ":sk": "PAYMENT",
+    ":deleted": false
+}
   })
 );
         payments = result.Items || [];
@@ -129,11 +127,12 @@ export const handler = async (event) => {
         const result = await docClient.send(
   new ScanCommand({
     TableName: tableName,
-    FilterExpression:
-      "SK = :sk AND attribute_not_exists(isDeleted)",
-    ExpressionAttributeValues: {
-      ":sk": "PAYMENT"
-    }
+   FilterExpression:
+"SK = :sk AND isDeleted = :deleted",
+ExpressionAttributeValues: {
+    ":sk": "PAYMENT",
+    ":deleted": false
+}
   })
 );
         payments = result.Items || [];
@@ -195,7 +194,7 @@ export const handler = async (event) => {
 
       if (body.paymentStatus === PAYMENT_STATUS.PAID) {
         // Execute an atomic cross-domain status cascade transaction
-        await docClient.send(new TransactWriteItemsCommand({
+        await docClient.send(new TransactWriteCommand({
           TransactItems: [
             {
               Update: {
@@ -274,7 +273,7 @@ export const handler = async (event) => {
       const payment = paymentRes.Item;
       const now = new Date().toISOString();
 
-      await docClient.send(new TransactWriteItemsCommand({
+      await docClient.send(new TransactWriteCommand({
         TransactItems: [
           {
             Update: {
