@@ -75,10 +75,13 @@ export const handler = async (event) => {
      const result = await docClient.send(
   new ScanCommand({
     TableName: tableName,
-    FilterExpression: "SK = :sk AND attribute_not_exists(isDeleted)",
-    ExpressionAttributeValues: {
-      ":sk": "STOCK"
-    }
+   FilterExpression:
+"begins_with(PK,:pk) AND SK=:sk AND isDeleted=:deleted",
+ExpressionAttributeValues:{
+    ":pk":"INVENTORY#",
+    ":sk":"STOCK",
+    ":deleted":false
+}
   })
 );
 
@@ -165,7 +168,9 @@ export const handler = async (event) => {
 
       const body = parseJsonBody(event);
       const updateExpressions = [];
-      const expressionAttributeValues = { ":now": new Date().toISOString() };
+      const expressionAttributeValues = {
+  ":now": new Date().toISOString(),
+};
 
       if (body.availableQuantity !== undefined) {
         updateExpressions.push("availableQuantity = :aq");
@@ -188,7 +193,7 @@ export const handler = async (event) => {
         TableName: tableName,
         Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
         UpdateExpression: expressionString,
-        ConditionExpression: "attribute_exists(PK) AND isDeleted = :deleted",
+        ConditionExpression:"attribute_exists(PK)",
         ExpressionAttributeValues: expressionAttributeValues,
         ReturnValues: "ALL_NEW"
       }));
@@ -218,7 +223,8 @@ export const handler = async (event) => {
           TableName: tableName,
           Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
           UpdateExpression: "SET availableQuantity = availableQuantity - :req, reservedQuantity = reservedQuantity + :req, reservationStatus = :resStatus, reservationTTL = :ttl, reservedBy = :uid, reservedAt = :now, updatedAt = :now",
-          ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(isDeleted) AND availableQuantity >= :req",
+ConditionExpression:
+"attribute_exists(PK) AND availableQuantity >= :req",
           ExpressionAttributeValues: {
             ":req": requestedQuantity,
             ":resStatus": "RESERVED",
@@ -258,7 +264,7 @@ export const handler = async (event) => {
           TableName: tableName,
           Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
           UpdateExpression: "SET availableQuantity = availableQuantity + :req, reservedQuantity = reservedQuantity - :req, reservationStatus = :status, reservationTTL = :nullVal, updatedAt = :now",
-          ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(isDeleted) AND reservedQuantity >= :req",
+          ConditionExpression:"attribute_exists(PK) AND reservedQuantity >= :req",
           ExpressionAttributeValues: {
             ":req": requestedQuantity,
             ":status": "AVAILABLE",
@@ -297,7 +303,7 @@ export const handler = async (event) => {
           TableName: tableName,
           Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
           UpdateExpression: "SET reservedQuantity = reservedQuantity - :req, reservationStatus = :status, updatedAt = :now",
-          ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(isDeleted) AND reservedQuantity >= :req",
+          ConditionExpression:"attribute_exists(PK) AND reservedQuantity >= :req",
           ExpressionAttributeValues: {
             ":req": requestedQuantity,
             ":status": "COMMITTED",
