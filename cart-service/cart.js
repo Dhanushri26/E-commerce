@@ -56,20 +56,58 @@ const calculateCartTotals = (items, user) => {
 // NOTE: In strict microservice separation, these fetch metrics from 
 // respective tables, or via high-speed external endpoints. 
 // For now, they read securely from your single-table backend layout.
-const fetchProductDetails = async (docClient, tableName, productId) => {
-  const res = await docClient.send(new GetCommand({
-    TableName: tableName,
-    Key: { PK: `PRODUCT#${productId}`, SK: "METADATA" }
-  }));
-  return res.Item && !res.Item.isDeleted ? res.Item : null;
+const fetchProductDetails = async (
+    docClient,
+    productTable,
+    productId
+) => {
+
+    const res = await docClient.send(
+        new GetCommand({
+
+            TableName: productTable,
+
+            Key: {
+
+                PK: `PRODUCT#${productId}`,
+
+                SK: "METADATA",
+
+            },
+
+        })
+    );
+
+    return res.Item && !res.Item.isDeleted
+        ? res.Item
+        : null;
 };
 
-const fetchInventoryDetails = async (docClient, tableName, productId) => {
-  const res = await docClient.send(new GetCommand({
-    TableName: tableName,
-    Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" }
-  }));
-  return res.Item && !res.Item.isDeleted ? res.Item : null;
+const fetchInventoryDetails = async (
+    docClient,
+    inventoryTable,
+    productId
+) => {
+
+    const res = await docClient.send(
+        new GetCommand({
+
+            TableName: inventoryTable,
+
+            Key: {
+
+                PK: `INVENTORY#${productId}`,
+
+                SK: "STOCK",
+
+            },
+
+        })
+    );
+
+    return res.Item && !res.Item.isDeleted
+        ? res.Item
+        : null;
 };
 
 const resolveUnitPrice = (product, user) => {
@@ -86,7 +124,12 @@ export const handler = async (event) => {
     const method = event?.httpMethod || event?.requestContext?.httpMethod || event?.requestContext?.http?.method;
     const path = event?.rawPath || event?.path || "";
     const userContext = extractUserContext(event);
-    const { docClient, tableName } = getDbClient();
+const {
+    docClient,
+    cartTable,
+    productTable,
+    inventoryTable
+} = getDbClient();
 
     if (!userContext.isAuthenticated) {
       return createErrorResponse(401, "Authentication credentials required");
@@ -99,7 +142,7 @@ export const handler = async (event) => {
     // ------------------------------------------
     if (method === "GET" && path === "/cart") {
       const result = await docClient.send(new QueryCommand({
-        TableName: tableName,
+        TableName: cartTable,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         FilterExpression: "attribute_not_exists(isDeleted)",
         ExpressionAttributeValues: { ":pk": cartPartition, ":sk": "ITEM#" }
@@ -113,7 +156,7 @@ export const handler = async (event) => {
     // ------------------------------------------
     if (method === "GET" && path === "/cart/summary") {
       const result = await docClient.send(new QueryCommand({
-        TableName: tableName,
+        TableName: cartTable,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         FilterExpression: "attribute_not_exists(isDeleted)",
         ExpressionAttributeValues: { ":pk": cartPartition, ":sk": "ITEM#" }
@@ -136,13 +179,23 @@ export const handler = async (event) => {
       }
 
       // Inter-domain lookups adapted via table clients
-      const product = await fetchProductDetails(docClient, tableName, productId);
+      const product =
+await fetchProductDetails(
+docClient,
+productTable,
+productId
+);
       if (!product) return createErrorResponse(404, "Product domain record not found");
       if (userContext.isCustomer && product.is_b2b_only) {
         return createErrorResponse(403, "B2B catalog access restriction");
       }
 
-      const inventory = await fetchInventoryDetails(docClient, tableName, productId);
+      const inventory =
+await fetchInventoryDetails(
+docClient,
+inventoryTable,
+productId
+);
       const stockAvailable = Number(inventory?.availableQuantity ?? inventory?.available_quantity ?? 0);
       
       // Fetch existing cart row to compile aggregate volumes
@@ -198,12 +251,22 @@ export const handler = async (event) => {
       if (!item || item.isDeleted === true) return createErrorResponse(404, "Cart item line variant not found");
       if (!canAccessItem(userContext, item)) return createErrorResponse(403, "Access unauthorized");
 
-      const inventory = await fetchInventoryDetails(docClient, tableName, productId);
+      const inventory =
+await fetchInventoryDetails(
+docClient,
+inventoryTable,
+productId
+);
       if (!inventory || Number(inventory.availableQuantity || 0) < quantity) {
         return createErrorResponse(409, "Insufficient warehouse allocations for update quantity bounds");
       }
 
-      const product = await fetchProductDetails(docClient, tableName, productId);
+      const product =
+await fetchProductDetails(
+docClient,
+productTable,
+productId
+);
       const unitPrice = resolveUnitPrice(product, userContext);
 
       const updatedFields = {

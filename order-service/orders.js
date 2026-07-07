@@ -55,7 +55,12 @@ export const handler = async (event) => {
     const method = event?.httpMethod || event?.requestContext?.httpMethod || event?.requestContext?.http?.method;
     const path = event?.rawPath || event?.path || "";
     const userContext = extractUserContext(event);
-    const { docClient, tableName } = getDbClient();
+    const {
+      docClient,
+      orderTable,
+      cartTable,
+      productTable
+    } = getDbClient();
 
     if (!userContext.isAuthenticated) {
       return createErrorResponse(403, "Authentication required");
@@ -70,7 +75,7 @@ export const handler = async (event) => {
       if (userContext.isAdmin) {
         // Admin scan fallback or secondary index lookup
         const result = await docClient.send(new QueryCommand({
-          TableName: tableName,
+          TableName: orderTable,
           KeyConditionExpression: "begins_with(PK, :orderPrefix)",
           FilterExpression: "SK = :meta AND attribute_not_exists(isDeleted)",
           ExpressionAttributeValues: { ":orderPrefix": "ORDER#", ":meta": "METADATA" }
@@ -83,7 +88,7 @@ export const handler = async (event) => {
 
         // Fetch user or business inverted routing indices
         const trackingIndex = await docClient.send(new QueryCommand({
-          TableName: tableName,
+          TableName: orderTable,
           KeyConditionExpression: "PK = :pk AND begins_with(SK, :skPrefix)",
           FilterExpression: "attribute_not_exists(isDeleted)",
           ExpressionAttributeValues: { ":pk": partitionKey, ":skPrefix": "ORDER#" }
@@ -92,7 +97,7 @@ export const handler = async (event) => {
         // Hydrate full orders metadata using isolated reads
         for (const indexDoc of trackingIndex.Items || []) {
           const orderRes = await docClient.send(new GetCommand({
-            TableName: tableName,
+            TableName: orderTable,
             Key: { PK: `ORDER#${indexDoc.orderId}`, SK: "METADATA" }
           }));
           if (orderRes.Item && !orderRes.Item.isDeleted) {
@@ -113,7 +118,7 @@ export const handler = async (event) => {
       if (!orderId) return createErrorResponse(400, "Order identification sequence parameter required");
 
       const res = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: orderTable,
         Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
       }));
 
@@ -139,14 +144,23 @@ export const handler = async (event) => {
         const body = parseJsonBody(event);
         const cartPartition = getCartPartition(userContext);
 
+        console.log("========== ORDER DEBUG ==========");
+        console.log("User Context:", JSON.stringify(userContext, null, 2));
+        console.log("Cart Partition:", cartPartition);
+
         // Fetch active cart items across the partition
         const cartResult = await docClient.send(new QueryCommand({
-          TableName: tableName,
+          TableName: cartTable,
           KeyConditionExpression: "PK = :pk AND begins_with(SK, :skPrefix)",
           FilterExpression: "attribute_not_exists(isDeleted)",
           ExpressionAttributeValues: { ":pk": cartPartition, ":skPrefix": "ITEM#" }
         }));
 
+        console.log(
+          "Cart Items Found:",
+          JSON.stringify(cartResult.Items, null, 2)
+      );
+      console.log("Cart Result:", JSON.stringify(cartResult, null, 2));
         const cartItems = cartResult.Items || [];
         if (cartItems.length === 0) return createErrorResponse(422, "Transaction halted: Cart is empty");
 
@@ -156,7 +170,7 @@ export const handler = async (event) => {
           
           // Read item configuration directly from shared document structure
           const prodRes = await docClient.send(new GetCommand({
-            TableName: tableName,
+            TableName: productTable,
             Key: { PK: `PRODUCT#${cartItem.productId}`, SK: "METADATA" }
           }));
 
@@ -180,7 +194,7 @@ export const handler = async (event) => {
         
         // Assert order uniqueness
         const uniqueCheck = await docClient.send(new GetCommand({
-          TableName: tableName,
+          TableName: orderTable,
           Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
         }));
         if (uniqueCheck.Item) return createErrorResponse(409, "Order record collision identified");
@@ -220,14 +234,14 @@ export const handler = async (event) => {
 
         // Construct DynamoDB Transaction payload array
         const transactItems = [
-          { Put: { TableName: tableName, Item: orderDoc } },
-          { Put: { TableName: tableName, Item: userIndex } }
+          { Put: { TableName: orderTable, Item: orderDoc } },
+          { Put: { TableName: orderTable, Item: userIndex } }
         ];
 
         if (userContext.isBusiness && userContext.businessId) {
           transactItems.push({
             Put: {
-              TableName: tableName,
+              TableName: orderTable,
               Item: {
                 PK: `BUSINESS#${userContext.businessId}`,
                 SK: `ORDER#${orderId}`,
@@ -243,7 +257,7 @@ export const handler = async (event) => {
         // Add soft-delete or actual cleanup directives for existing cart lines
         for (const item of cartItems) {
           transactItems.push({
-            Delete: { TableName: tableName, Key: { PK: cartPartition, SK: item.SK } }
+            Delete: { TableName: cartTable, Key: { PK: cartPartition, SK: item.SK } }
           });
         }
 
@@ -273,7 +287,7 @@ export const handler = async (event) => {
       if (!orderId) return createErrorResponse(400, "Target orderId placeholder parameter required");
 
       const existingRes = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: orderTable,
         Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
       }));
 
@@ -295,7 +309,7 @@ export const handler = async (event) => {
         const transactUpdates = [
           {
             Update: {
-              TableName: tableName,
+              TableName: orderTable,
               Key: { PK: `ORDER#${orderId}`, SK: "METADATA" },
               UpdateExpression: "SET orderStatus = :os, paymentStatus = :ps, updatedAt = :now, updatedBy = :uid",
               ExpressionAttributeValues: { ":os": targetStatus, ":ps": targetPayment, ":now": now, ":uid": userContext.userId }
@@ -303,7 +317,7 @@ export const handler = async (event) => {
           },
           {
             Update: {
-              TableName: tableName,
+              TableName: orderTable,
               Key: { PK: `USER#${order.userId}`, SK: `ORDER#${orderId}` },
               UpdateExpression: "SET orderStatus = :os, updatedAt = :now",
               ExpressionAttributeValues: { ":os": targetStatus, ":now": now }
@@ -314,7 +328,7 @@ export const handler = async (event) => {
         if (order.businessId) {
           transactUpdates.push({
             Update: {
-              TableName: tableName,
+              TableName: orderTable,
               Key: { PK: `BUSINESS#${order.businessId}`, SK: `ORDER#${orderId}` },
               UpdateExpression: "SET orderStatus = :os, updatedAt = :now",
               ExpressionAttributeValues: { ":os": targetStatus, ":now": now }
@@ -352,7 +366,7 @@ export const handler = async (event) => {
       const expressionString = `SET ${updateExpressions.join(", ")}, updatedAt = :now, updatedBy = :uid`;
 
       await docClient.send(new UpdateCommand({
-        TableName: tableName,
+        TableName: orderTable,
         Key: { PK: `ORDER#${orderId}`, SK: "METADATA" },
         UpdateExpression: expressionString,
         ExpressionAttributeValues: expressionAttributeValues
@@ -369,7 +383,7 @@ export const handler = async (event) => {
       if (!orderId) return createErrorResponse(400, "Order missing identification key placeholder");
 
       const existingRes = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: orderTable,
         Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
       }));
 
@@ -381,7 +395,7 @@ export const handler = async (event) => {
       const transactDeletes = [
         {
           Update: {
-            TableName: tableName,
+            TableName: orderTable,
             Key: { PK: `ORDER#${orderId}`, SK: "METADATA" },
             UpdateExpression: "SET isDeleted = :t, deletedAt = :now, deletedBy = :uid",
             ExpressionAttributeValues: { ":t": true, ":now": now, ":uid": userContext.userId }
@@ -389,7 +403,7 @@ export const handler = async (event) => {
         },
         {
           Update: {
-            TableName: tableName,
+            TableName: orderTable,
             Key: { PK: `USER#${order.userId}`, SK: `ORDER#${orderId}` },
             UpdateExpression: "SET isDeleted = :t",
             ExpressionAttributeValues: { ":t": true }
@@ -400,7 +414,7 @@ export const handler = async (event) => {
       if (order.businessId) {
         transactDeletes.push({
           Update: {
-            TableName: tableName,
+            TableName: orderTable,
             Key: { PK: `BUSINESS#${order.businessId}`, SK: `ORDER#${orderId}` },
             UpdateExpression: "SET isDeleted = :t",
             ExpressionAttributeValues: { ":t": true }
