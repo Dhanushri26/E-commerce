@@ -200,7 +200,7 @@ productId
       
       // Fetch existing cart row to compile aggregate volumes
       const currentItemRes = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: cartTable,
         Key: { PK: cartPartition, SK: `ITEM#${productId}` }
       }));
       
@@ -230,7 +230,7 @@ productId
         ...createAuditFields(userContext.userId)
       };
 
-      await docClient.send(new PutCommand({ TableName: tableName, Item: itemPayload }));
+      await docClient.send(new PutCommand({ TableName: cartTable, Item: itemPayload }));
       return buildResponse(201, itemPayload);
     }
 
@@ -245,7 +245,7 @@ productId
       if (!productId || quantity <= 0) return createErrorResponse(422, "Positive integer quantity required");
 
       const targetKey = { PK: cartPartition, SK: `ITEM#${productId}` };
-      const currentRes = await docClient.send(new GetCommand({ TableName: tableName, Key: targetKey }));
+      const currentRes = await docClient.send(new GetCommand({ TableName: cartTable, Key: targetKey }));
       const item = currentRes.Item;
 
       if (!item || item.isDeleted === true) return createErrorResponse(404, "Cart item line variant not found");
@@ -278,7 +278,7 @@ productId
         ...updateAuditFields(userContext.userId)
       };
 
-      await docClient.send(new PutCommand({ TableName: tableName, Item: updatedFields }));
+      await docClient.send(new PutCommand({ TableName: cartTable, Item: updatedFields }));
       return buildResponse(200, updatedFields);
     }
 
@@ -290,13 +290,13 @@ productId
       if (!productId) return createErrorResponse(400, "productId target parameter required");
 
       const targetKey = { PK: cartPartition, SK: `ITEM#${productId}` };
-      const currentRes = await docClient.send(new GetCommand({ TableName: tableName, Key: targetKey }));
+      const currentRes = await docClient.send(new GetCommand({ TableName: cartTable, Key: targetKey }));
       if (!currentRes.Item || currentRes.Item.isDeleted === true) return createErrorResponse(404, "Targeted item not found");
       if (!canAccessItem(userContext, currentRes.Item)) return createErrorResponse(403, "Access unauthorized");
 
       // Soft delete updates
       await docClient.send(new UpdateCommand({
-        TableName: tableName,
+        TableName: cartTable,
         Key: targetKey,
         UpdateExpression: "SET isDeleted = :d, deletedAt = :now, deletedBy = :uid, updatedAt = :now",
         ExpressionAttributeValues: { ":d": true, ":now": new Date().toISOString(), ":uid": userContext.userId }
@@ -310,7 +310,7 @@ productId
     // ------------------------------------------
     if (method === "DELETE" && path === "/cart/clear") {
       const result = await docClient.send(new QueryCommand({
-        TableName: tableName,
+        TableName: cartTable,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         FilterExpression: "attribute_not_exists(isDeleted)",
         ExpressionAttributeValues: { ":pk": cartPartition, ":sk": "ITEM#" }
@@ -321,7 +321,7 @@ productId
 
       for (const item of activeItems) {
         await docClient.send(new UpdateCommand({
-          TableName: tableName,
+          TableName: cartTable,
           Key: { PK: cartPartition, SK: item.SK },
           UpdateExpression: "SET isDeleted = :d, deletedAt = :now, deletedBy = :uid, updatedAt = :now",
           ExpressionAttributeValues: { ":d": true, ":now": now, ":uid": userContext.userId }
@@ -352,14 +352,20 @@ productId
 
         if (!productId || quantity <= 0) continue;
 
-        const product = await fetchProductDetails(docClient, tableName, productId);
-        if (!product || (userContext.isCustomer && product.is_b2b_only)) continue;
+        const product = await fetchProductDetails(
+          docClient,
+          productTable,
+          productId
+      );        if (!product || (userContext.isCustomer && product.is_b2b_only)) continue;
 
-        const inventory = await fetchInventoryDetails(docClient, tableName, productId);
-        if (!inventory || Number(inventory.availableQuantity || 0) < quantity) continue;
+      const inventory = await fetchInventoryDetails(
+        docClient,
+        inventoryTable,
+        productId
+    );        if (!inventory || Number(inventory.availableQuantity || 0) < quantity) continue;
 
         const currentItemRes = await docClient.send(new GetCommand({
-          TableName: tableName,
+          TableName: cartTable,
           Key: { PK: cartPartition, SK: `ITEM#${productId}` }
         }));
         
@@ -384,7 +390,7 @@ productId
           ...createAuditFields(userContext.userId)
         };
 
-        await docClient.send(new PutCommand({ TableName: tableName, Item: payload }));
+        await docClient.send(new PutCommand({ TableName: cartTable, Item: payload }));
         importedCount++;
       }
 

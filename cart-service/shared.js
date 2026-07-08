@@ -49,12 +49,6 @@ let docClient = null;
 
 export const getDbClient = () => {
 
-  const tableName = process.env.DYNAMODB_TABLE_NAME;
-
-  if (!tableName) {
-    throw new Error("Missing DYNAMODB_TABLE_NAME environment variable");
-  }
-
   if (!docClient) {
 
     const client = new DynamoDBClient({
@@ -70,8 +64,23 @@ export const getDbClient = () => {
   }
 
   return {
+
     docClient,
-    tableName,
+
+    tableName: process.env.DYNAMODB_TABLE_NAME,
+
+    cartTable: process.env.CART_TABLE,
+
+    productTable: process.env.PRODUCT_TABLE,
+
+    inventoryTable: process.env.INVENTORY_TABLE,
+
+    orderTable: process.env.ORDER_TABLE,
+
+    paymentTable: process.env.PAYMENT_TABLE,
+
+    userTable: process.env.USER_TABLE,
+
   };
 
 };
