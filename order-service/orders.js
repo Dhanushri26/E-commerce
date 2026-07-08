@@ -25,6 +25,11 @@ import {
   TransactWriteCommand
 } from "@aws-sdk/lib-dynamodb";
 
+import {
+    SQSClient,
+    SendMessageCommand
+} from "@aws-sdk/client-sqs";
+
 // ==========================================
 // BUSINESS LOGIC & COMPLIANCE FILTERS
 // ==========================================
@@ -45,6 +50,10 @@ const canAccessOrder = (user, order) => {
 const buildOrderResponse = (order) => ({
   ...order,
   totalAmount: Number(order.totalAmount || 0),
+});
+
+const sqs = new SQSClient({
+    region: process.env.AWS_REGION,
 });
 
 // ==========================================
@@ -266,7 +275,18 @@ export const handler = async (event) => {
         TransactItems: transactItems
     })
 );
-
+      await sqs.send(
+    new SendMessageCommand({
+        QueueUrl: process.env.ORDER_QUEUE_URL,
+        MessageBody: JSON.stringify({
+            eventType: "ORDER_CREATED",
+            orderId: orderId,
+            userId: userContext.userId,
+            totalAmount: orderDoc.totalAmount,
+            createdAt: new Date().toISOString()
+        })
+    })
+);
         const responsePayload = { order: buildOrderResponse(orderDoc) };
         await releaseOrResolveLock(idempotencyKey, responsePayload);
         return buildResponse(201, responsePayload);

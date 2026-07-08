@@ -21,6 +21,11 @@ import {
   updateAuditFields,
 } from "./shared.js";
 
+import {
+    SNSClient,
+    PublishCommand
+} from "@aws-sdk/client-sns";
+
 // ==========================================
 // BUSINESS LOGIC & PERMISSION DOMAINS
 // ==========================================
@@ -48,16 +53,159 @@ const validatePaymentBody = (body) => {
   return errors;
 };
 
+const sns = new SNSClient({
+    region: process.env.AWS_REGION
+});
+
 // ==========================================
 // MAIN AWS LAMBDA HANDLER
 // ==========================================
+
+const processOrderCreatedEvent = async (message) => {
+
+  console.log("Processing Order Event...");
+
+  const {
+      docClient,
+      paymentTable,
+      orderTable
+  } = getDbClient();
+
+  // Read Order
+  const orderResult = await docClient.send(
+      new GetCommand({
+          TableName: orderTable,
+          Key: {
+              PK: `ORDER#${message.orderId}`,
+              SK: "METADATA"
+          }
+      })
+  );
+
+  if (!orderResult.Item) {
+      console.log("Order not found");
+      return;
+  }
+
+  const order = orderResult.Item;
+
+  console.log("Order Found:", order.orderId);
+  const paymentId = randomUUID();
+
+const paymentItem = {
+    PK: `PAYMENT#${paymentId}`,
+    SK: "PAYMENT",
+
+    paymentId,
+
+    orderId: order.orderId,
+
+    ownerId: order.ownerId,
+
+    businessId: order.businessId || null,
+
+    amount: order.totalAmount,
+
+    currency: "USD",
+
+    paymentMethod: "CARD",
+
+    paymentStatus: "PAID",
+
+    transactionReference: `AUTO-${paymentId}`,
+
+    createdAt: new Date().toISOString(),
+
+    updatedAt: new Date().toISOString(),
+
+    isDeleted: false
+};
+
+await docClient.send(
+    new PutCommand({
+        TableName: paymentTable,
+        Item: paymentItem
+    })
+);
+
+console.log("Payment Created:", paymentId);
+
+await docClient.send(
+  new UpdateCommand({
+      TableName: orderTable,
+      Key: {
+          PK: `ORDER#${order.orderId}`,
+          SK: "METADATA"
+      },
+      UpdateExpression:
+          "SET paymentStatus = :paymentStatus, orderStatus = :orderStatus, updatedAt = :updatedAt",
+      ExpressionAttributeValues: {
+          ":paymentStatus": "PAID",
+          ":orderStatus": "CONFIRMED",
+          ":updatedAt": new Date().toISOString()
+      }
+  })
+);
+
+console.log("Order Updated:", order.orderId);
+
+await sns.send(
+    new PublishCommand({
+
+        TopicArn: process.env.PAYMENT_TOPIC_ARN,
+
+        Subject: "Payment Successful",
+
+        Message: JSON.stringify({
+
+            eventType: "PAYMENT_SUCCESS",
+
+            paymentId,
+
+            orderId: order.orderId,
+
+            amount: order.totalAmount,
+
+            customerId: order.ownerId,
+
+            createdAt: new Date().toISOString()
+
+        })
+
+    })
+);
+
+console.log("SNS Event Published");
+
+};
+
 export const handler = async (event) => {
   try {
     const method = event?.httpMethod || event?.requestContext?.httpMethod || event?.requestContext?.http?.method;
     const path = event?.rawPath || event?.path || "";
     const userContext = extractUserContext(event);
-    const { docClient, tableName } = getDbClient();
+    const {
+      docClient,
+      paymentTable,
+      orderTable
+  } = getDbClient();
 
+  if (event.Records && event.Records[0].eventSource === "aws:sqs") {
+
+    console.log("SQS Event Received");
+
+    const message = JSON.parse(event.Records[0].body);
+
+    await processOrderCreatedEvent(message);
+
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+            success: true,
+            message: "Payment event processed"
+        })
+    };
+}
     // ------------------------------------------
     // POST /payments (Initiate Transaction)
     // ------------------------------------------
@@ -90,7 +238,7 @@ export const handler = async (event) => {
         ...createAuditFields(userContext.userId),
       };
 
-      await docClient.send(new PutCommand({ TableName: tableName, Item: paymentDoc }));
+      await docClient.send(new PutCommand({ TableName: paymentTable, Item: paymentDoc }));
       return buildResponse(201, buildPaymentResponse(paymentDoc));
     }
 
@@ -104,7 +252,7 @@ export const handler = async (event) => {
       if (userContext.isAdmin) {
        const result = await docClient.send(
   new ScanCommand({
-    TableName: tableName,
+    TableName: paymentTable,
    FilterExpression:
 "SK = :sk AND isDeleted = :deleted",
 ExpressionAttributeValues: {
@@ -126,7 +274,7 @@ ExpressionAttributeValues: {
 
         const result = await docClient.send(
   new ScanCommand({
-    TableName: tableName,
+    TableName: paymentTable,
    FilterExpression:
 "SK = :sk AND isDeleted = :deleted",
 ExpressionAttributeValues: {
@@ -198,7 +346,7 @@ ExpressionAttributeValues: {
           TransactItems: [
             {
               Update: {
-                TableName: tableName,
+                TableName: paymentTable,
                 Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" },
                 UpdateExpression: exprString,
                 ExpressionAttributeValues: exprValues
@@ -206,7 +354,7 @@ ExpressionAttributeValues: {
             },
             {
               Update: {
-                TableName: tableName,
+                TableName: orderTable,
                 Key: { PK: `ORDER#${payment.orderId}`, SK: "METADATA" },
                 UpdateExpression: "SET paymentStatus = :status, updatedAt = :now",
                 ExpressionAttributeValues: { ":status": PAYMENT_STATUS.PAID, ":now": now }
@@ -216,7 +364,7 @@ ExpressionAttributeValues: {
         }));
       } else {
         await docClient.send(new UpdateCommand({
-          TableName: tableName,
+          TableName: paymentTable,
           Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" },
           UpdateExpression: exprString,
           ExpressionAttributeValues: exprValues
@@ -237,7 +385,7 @@ ExpressionAttributeValues: {
       if (!orderId) return createErrorResponse(422, "orderId is required");
 
       const orderRes = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: orderTable,
         Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
       }));
       if (!orderRes.Item || orderRes.Item.isDeleted) return createErrorResponse(404, "Target checkout order missing");
@@ -265,7 +413,7 @@ ExpressionAttributeValues: {
       if (!paymentId || refundAmount <= 0) return createErrorResponse(422, "Valid paymentId and positive refundAmount are required");
 
       const paymentRes = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: paymentTable,
         Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" }
       }));
       if (!paymentRes.Item || paymentRes.Item.isDeleted) return createErrorResponse(404, "Payment mapping record not found");
@@ -277,7 +425,7 @@ ExpressionAttributeValues: {
         TransactItems: [
           {
             Update: {
-              TableName: tableName,
+              TableName: paymentTable,
               Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" },
               UpdateExpression: "SET paymentStatus = :ps, refundAmount = :ra, refundedAt = :now, refundedBy = :uid, updatedAt = :now, updatedBy = :uid",
               ExpressionAttributeValues: { ":ps": PAYMENT_STATUS.REFUNDED, ":ra": refundAmount, ":now": now, ":uid": userContext.userId }
@@ -285,7 +433,7 @@ ExpressionAttributeValues: {
           },
           {
             Update: {
-              TableName: tableName,
+              TableName: orderTable,
               Key: { PK: `ORDER#${payment.orderId}`, SK: "METADATA" },
               UpdateExpression: "SET paymentStatus = :ps, updatedAt = :now",
               ExpressionAttributeValues: { ":ps": PAYMENT_STATUS.REFUNDED, ":now": now }
@@ -310,7 +458,7 @@ ExpressionAttributeValues: {
       if (!orderId) return createErrorResponse(422, "orderId parameter required");
 
       const orderRes = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: orderTable,
         Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
       }));
       if (!orderRes.Item || orderRes.Item.isDeleted) return createErrorResponse(404, "Associated purchase order missing");
@@ -328,7 +476,7 @@ ExpressionAttributeValues: {
 
       const now = new Date().toISOString();
       await docClient.send(new UpdateCommand({
-        TableName: tableName,
+        TableName: orderTable,
         Key: { PK: `ORDER#${orderId}`, SK: "METADATA" },
         UpdateExpression: "SET paymentStatus = :ps, updatedAt = :now",
         ExpressionAttributeValues: { ":ps": PAYMENT_STATUS.PAID, ":now": now }
