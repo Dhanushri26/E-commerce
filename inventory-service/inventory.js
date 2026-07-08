@@ -62,7 +62,11 @@ export const handler = async (event) => {
     const method = event?.httpMethod || event?.requestContext?.httpMethod || event?.requestContext?.http?.method;
     const path = event?.rawPath || event?.path || "";
     const userContext = extractUserContext(event);
-    const { docClient, tableName } = getDbClient();
+    const {
+      docClient,
+      inventoryTable,
+      productTable
+  } = getDbClient();
 
     if (!canReadInventory(userContext)) {
       return createErrorResponse(403, "Access unauthorized");
@@ -74,7 +78,7 @@ export const handler = async (event) => {
     if (method === "GET" && (path === "/inventory" || path === "/inventory/")) {
      const result = await docClient.send(
   new ScanCommand({
-    TableName: tableName,
+    TableName: inventoryTable,
    FilterExpression:
 "begins_with(PK,:pk) AND SK=:sk AND isDeleted=:deleted",
 ExpressionAttributeValues:{
@@ -100,7 +104,7 @@ ExpressionAttributeValues:{
       if (!productId) return createErrorResponse(400, "Product specification parameter missing");
 
       const res = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: inventoryTable,
         Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" }
       }));
 
@@ -122,14 +126,14 @@ ExpressionAttributeValues:{
 
       // Verify Product reference entity existence directly inside the catalog domain prefix
       const prodRes = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: productTable,
         Key: { PK: `PRODUCT#${productId}`, SK: "METADATA" }
       }));
       if (!prodRes.Item || prodRes.Item.isDeleted) return createErrorResponse(404, "Base product reference mapping missing");
 
       // Verify uniqueness of the stock record
       const existRes = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: inventoryTable,
         Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" }
       }));
       if (existRes.Item && !existRes.Item.isDeleted) return createErrorResponse(409, "Inventory record context collision");
@@ -154,7 +158,7 @@ ExpressionAttributeValues:{
         ...createAuditFields(userContext.userId || "system")
       };
 
-      await docClient.send(new PutCommand({ TableName: tableName, Item: inventoryDoc }));
+      await docClient.send(new PutCommand({ TableName: inventoryTable, Item: inventoryDoc }));
       return buildResponse(201, buildInventoryResponse(inventoryDoc));
     }
 
@@ -190,7 +194,7 @@ ExpressionAttributeValues:{
       const expressionString = `SET ${updateExpressions.join(", ")}, updatedAt = :now`;
 
       const result = await docClient.send(new UpdateCommand({
-        TableName: tableName,
+        TableName: inventoryTable,
         Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
         UpdateExpression: expressionString,
         ConditionExpression:"attribute_exists(PK)",
@@ -220,7 +224,7 @@ ExpressionAttributeValues:{
 
       try {
         const result = await docClient.send(new UpdateCommand({
-          TableName: tableName,
+          TableName: inventoryTable,
           Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
           UpdateExpression: "SET availableQuantity = availableQuantity - :req, reservedQuantity = reservedQuantity + :req, reservationStatus = :resStatus, reservationTTL = :ttl, reservedBy = :uid, reservedAt = :now, updatedAt = :now",
 ConditionExpression:
@@ -235,7 +239,7 @@ ConditionExpression:
           ReturnValues: "ALL_NEW"
         }));
 
-        await appendAuditRecord(docClient, tableName, productId, "RESERVE", requestedQuantity, userContext.userId, body.reason);
+        await appendAuditRecord(docClient, inventoryTable, productId, "RESERVE", requestedQuantity, userContext.userId, body.reason);
         return buildResponse(200, buildInventoryResponse(result.Attributes));
       } catch (err) {
         if (err.name === "ConditionalCheckFailedException") {
@@ -261,7 +265,7 @@ ConditionExpression:
 
       try {
         const result = await docClient.send(new UpdateCommand({
-          TableName: tableName,
+          TableName: inventoryTable,
           Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
           UpdateExpression: "SET availableQuantity = availableQuantity + :req, reservedQuantity = reservedQuantity - :req, reservationStatus = :status, reservationTTL = :nullVal, updatedAt = :now",
           ConditionExpression:"attribute_exists(PK) AND reservedQuantity >= :req",
@@ -274,7 +278,7 @@ ConditionExpression:
           ReturnValues: "ALL_NEW"
         }));
 
-        await appendAuditRecord(docClient, tableName, productId, "RELEASE", requestedQuantity, userContext.userId, body.reason);
+        await appendAuditRecord(docClient, inventoryTable, productId, "RELEASE", requestedQuantity, userContext.userId, body.reason);
         return buildResponse(200, buildInventoryResponse(result.Attributes));
       } catch (err) {
         if (err.name === "ConditionalCheckFailedException") {
@@ -300,7 +304,7 @@ ConditionExpression:
 
       try {
         const result = await docClient.send(new UpdateCommand({
-          TableName: tableName,
+          TableName: inventoryTable,
           Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
           UpdateExpression: "SET reservedQuantity = reservedQuantity - :req, reservationStatus = :status, updatedAt = :now",
           ConditionExpression:"attribute_exists(PK) AND reservedQuantity >= :req",
@@ -312,7 +316,7 @@ ConditionExpression:
           ReturnValues: "ALL_NEW"
         }));
 
-        await appendAuditRecord(docClient, tableName, productId, "COMMIT", requestedQuantity, userContext.userId, body.reason);
+        await appendAuditRecord(docClient, inventoryTable, productId, "COMMIT", requestedQuantity, userContext.userId, body.reason);
         return buildResponse(200, buildInventoryResponse(result.Attributes));
       } catch (err) {
         if (err.name === "ConditionalCheckFailedException") {
@@ -331,7 +335,7 @@ ConditionExpression:
       if (!canManageInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
 
       await docClient.send(new UpdateCommand({
-        TableName: tableName,
+        TableName: inventoryTable,
         Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
         UpdateExpression: "SET isDeleted = :t, deletedAt = :now, deletedBy = :uid, updatedAt = :now",
         ExpressionAttributeValues: { ":t": true, ":now": new Date().toISOString(), ":uid": userContext.userId }

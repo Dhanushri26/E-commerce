@@ -49,12 +49,6 @@ let docClient = null;
 
 export const getDbClient = () => {
 
-  const tableName = process.env.DYNAMODB_TABLE_NAME;
-
-  if (!tableName) {
-    throw new Error("Missing DYNAMODB_TABLE_NAME environment variable");
-  }
-
   if (!docClient) {
 
     const client = new DynamoDBClient({
@@ -70,8 +64,15 @@ export const getDbClient = () => {
   }
 
   return {
+
     docClient,
-    tableName,
+
+    tableName: process.env.DYNAMODB_TABLE_NAME,
+
+    inventoryTable: process.env.INVENTORY_TABLE,
+
+    productTable: process.env.PRODUCT_TABLE,
+
   };
 
 };
@@ -250,8 +251,11 @@ export const checkOrAcquireLock = async (idempotencyKey, context = {}) => {
     };
   }
 
-  const { docClient, tableName } = getDbClient();
-
+  const {
+    docClient,
+    inventoryTable,
+    productTable
+} = getDbClient();
   const ttl = Math.floor((Date.now() + (5 * 60 * 1000)) / 1000);
 
   try {
@@ -324,7 +328,11 @@ export const releaseOrResolveLock = async (
 
   if (!idempotencyKey) return;
 
-  const { docClient, tableName } = getDbClient();
+  const {
+    docClient,
+    inventoryTable,
+    productTable
+} = getDbClient();
 
   const ttl = Math.floor((Date.now() + (5 * 60 * 1000)) / 1000);
 
