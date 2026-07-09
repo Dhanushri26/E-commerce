@@ -1,5 +1,3 @@
-import type { Product, Order } from '../types'
-
 export const categories = [
   'Rings',
   'Necklaces',
@@ -13,7 +11,7 @@ export const categories = [
   'Watches',
 ]
 
-export const products: Product[] = Array.from({ length: 100 }, (_, index) => {
+export const products = Array.from({ length: 100 }, (_, index) => {
   const nameOptions = [
     '18K Diamond Engagement Ring',
     'Royal Emerald Necklace',
@@ -60,7 +58,7 @@ export const products: Product[] = Array.from({ length: 100 }, (_, index) => {
   }
 })
 
-export const orders: Order[] = [
+export const orders = [
   {
     id: 'ORD-1042',
     date: '2026-07-02',

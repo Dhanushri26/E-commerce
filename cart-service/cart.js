@@ -123,6 +123,19 @@ export const handler = async (event) => {
   try {
     const method = event?.httpMethod || event?.requestContext?.httpMethod || event?.requestContext?.http?.method;
     const path = event?.rawPath || event?.path || "";
+
+    if (method === "OPTIONS") {
+  return {
+    statusCode: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "http://localhost:5173",
+      "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+      "Access-Control-Allow-Headers":
+        "Content-Type,x-user-id,x-user-role",
+    },
+    body: "",
+  };
+}
     const userContext = extractUserContext(event);
 const {
     docClient,
