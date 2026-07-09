@@ -1,218 +1,276 @@
-# 💎 JewelCart Backend
+# 💎 JewelCart — Full-Stack Luxury Jewelry E-Commerce
 
-Backend for the **JewelCart** e-commerce application built with **Node.js** and **Express.js**. This project follows a simple service-based structure where each module handles a specific business domain such as products, orders, customers, inventory, payments, and cart management.
+JewelCart is a production-ready, cloud-native luxury jewelry e-commerce platform built on a **React + Vite** frontend backed by **AWS Lambda microservices** connected through a single **AWS API Gateway**, with authentication handled by **AWS Cognito**.
 
-> **Note:** This repository currently contains only the backend implementation. Frontend and complete microservices separation will be added in future updates.
+---
+
+## 🏗 Architecture Overview
+
+```
+┌─────────────────────────────────────────────────┐
+│              React + Vite Frontend               │
+│   AWS Amplify (Cognito Auth) · axios · TailwindCSS │
+└──────────────────────┬──────────────────────────┘
+                       │ HTTPS + JWT Bearer Token
+                       │ + x-user-id / x-user-role headers
+                       ▼
+┌─────────────────────────────────────────────────┐
+│         AWS API Gateway (Single Entry Point)     │
+│  https://k5piu4f4k3.execute-api.ap-southeast-1  │
+│            .amazonaws.com                        │
+└──┬──────────┬──────────┬───────────┬────────────┘
+   │          │          │           │           │
+   ▼          ▼          ▼           ▼           ▼
+[product]  [cart]    [order]    [payment]  [inventory]
+ Lambda    Lambda     Lambda      Lambda     Lambda
+   │          │          │           │           │
+   └──────────┴──────────┴───────────┴───────────┘
+                         │
+                  AWS DynamoDB (per-service tables)
+                  AWS SQS (order events)
+                  AWS SNS (payment notifications)
+```
 
 ---
 
 ## 📂 Project Structure
 
-```text 
-backend/
-├── node_modules/
-├── .env
-├── .gitignore
-├── cart.js
-├── customers.js
-├── inventory.js
-├── orders.js
-├── payments.js
-├── products.js
-├── server.js
-├── shared.js
-├── package.json
-└── package-lock.json
 ```
-
-### File Description
-
-| File           | Description                                                                          |
-| -------------- | ------------------------------------------------------------------------------------ |
-| `server.js`    | Main entry point of the application. Starts the Express server and registers routes. |
-| `products.js`  | Product-related APIs and logic.                                                      |
-| `customers.js` | Customer management APIs.                                                            |
-| `cart.js`      | Shopping cart operations.                                                            |
-| `orders.js`    | Order creation and management.                                                       |
-| `payments.js`  | Payment-related endpoints.                                                           |
-| `inventory.js` | Inventory and stock management.                                                      |
-| `shared.js`    | Shared utilities or common functions used across modules.                            |
-| `.env`         | Environment variables.                                                               |
+JewelCart/
+├── frontend/                    # React + Vite SPA
+│   └── src/
+│       ├── api/
+│       │   ├── axios.js         # Axios instance + Cognito auth interceptor
+│       │   ├── cart.js          # Cart service API calls
+│       │   ├── products.js      # Product service API calls
+│       │   ├── orders.js        # Order service API calls
+│       │   ├── payments.js      # Payment service API calls
+│       │   └── inventory.js     # Inventory service API calls
+│       ├── context/
+│       │   └── AppContext.jsx   # Global state + backend wiring
+│       ├── pages/               # All route pages
+│       ├── routes/              # React Router config
+│       ├── amplifyConfig.js     # Cognito configuration
+│       └── main.jsx             # Entry point
+│
+├── cart-service/
+│   ├── cart.js                  # AWS Lambda handler
+│   └── shared.js                # DynamoDB client + utilities
+│
+├── product-service/
+│   ├── products.js              # AWS Lambda handler
+│   └── shared.js
+│
+├── order-service/
+│   ├── orders.js                # AWS Lambda handler (+ SQS pub)
+│   └── shared.js
+│
+├── payment-service/
+│   ├── payments.js              # AWS Lambda handler (+ SNS pub)
+│   └── shared.js
+│
+├── inventory-service/
+│   ├── inventory.js             # AWS Lambda handler
+│   └── shared.js
+│
+├── API_ENDPOINTS.md             # 📋 Full endpoint connection log
+└── README.md                    # This file
+```
 
 ---
 
-## 🚀 Technologies Used
+## 🔐 Authentication — AWS Cognito
 
-* Node.js
-* Express.js
-* JavaScript
-* dotenv
+| Setting | Value |
+|---------|-------|
+| User Pool ID | `ap-southeast-1_zGjdn5K3U` |
+| App Client ID | `cpppgh9rt7kj1t3i5paej5526` |
+| Region | `ap-southeast-1` |
+| Login method | Email + Password |
+| SDK | `aws-amplify` v6 |
+
+### How it works:
+1. User logs in via `LoginTest.jsx` → `signIn()` from `aws-amplify/auth`
+2. Cognito issues Access Token + ID Token (JWT)
+3. `axios.js` request interceptor:
+   - Attaches `Authorization: Bearer <accessToken>` for API Gateway
+   - Decodes the **ID token** to extract `sub`, `email`, `cognito:groups`
+   - Injects `x-user-id`, `x-user-role`, `x-business-id` headers for Lambda
+4. Each Lambda reads these headers via `extractUserContext(event)` in `shared.js`
+
+### User Roles (via Cognito Groups):
+| Group | Role | Permissions |
+|-------|------|-------------|
+| `Admin` | Admin | Full access to all services |
+| `Business` | Business | B2B pricing, bulk cart import, credit PO |
+| _(none)_ | Customer | Standard shopping access |
+
+> **Note:** Add users to Cognito Groups to grant Admin/Business roles.
 
 ---
 
-## 📦 Installation
+## 🌐 API Endpoints
 
-Clone the repository:
+> See [API_ENDPOINTS.md](./API_ENDPOINTS.md) for the full connection log.
 
-```bash
-git clone <repository-url>
+**Base URL:** `https://k5piu4f4k3.execute-api.ap-southeast-1.amazonaws.com`
+
+### Products
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/products` | Required | List all products |
+| `GET` | `/products/{productId}` | Required | Get product by ID |
+| `POST` | `/products` | Admin | Create product |
+| `PUT` | `/products/{productId}` | Admin/Business | Update product |
+| `DELETE` | `/products/{productId}` | Admin | Delete product |
+
+### Cart
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/cart` | Required | Get user's cart |
+| `GET` | `/cart/summary` | Required | Cart totals (subtotal, tax, grandTotal) |
+| `POST` | `/cart/items` | Required | Add item to cart |
+| `PUT` | `/cart/items/{productId}` | Required | Update item quantity |
+| `DELETE` | `/cart/items/{productId}` | Required | Remove item |
+| `DELETE` | `/cart/clear` | Required | Clear all items |
+| `POST` | `/cart/bulk-import` | Business/Admin | Bulk add items |
+
+### Orders
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/orders` | Required | List user's orders |
+| `GET` | `/orders/{orderId}` | Required | Get order detail |
+| `POST` | `/orders` | Required | Place order from cart |
+| `PUT` | `/orders/{orderId}/cancel` | Required | Cancel order |
+| `PUT` | `/orders/{orderId}` | Admin | Update order status |
+| `DELETE` | `/orders/{orderId}` | Admin | Soft-delete order |
+
+### Payments
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/payments` | Required | List payments |
+| `POST` | `/payments` | Required | Create payment record |
+| `POST` | `/payments/intent` | Required | Create payment intent |
+| `POST` | `/payments/verify` | Required | Verify/authorize payment |
+| `POST` | `/payments/capture` | Admin | Capture payment |
+| `POST` | `/payments/refund` | Admin | Refund payment |
+| `POST` | `/payments/cancel` | Admin | Cancel payment |
+| `POST` | `/payments/po-verify` | Business/Admin | Verify purchase order |
+
+### Inventory
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/inventory` | Required | List inventory |
+| `GET` | `/inventory/{productId}` | Required | Get product stock |
+| `POST` | `/inventory` | Admin | Create inventory record |
+| `PATCH` | `/inventory/reserve` | Admin/Business | Reserve stock |
+
+---
+
+## 🗄 DynamoDB Tables
+
+Each Lambda service uses dedicated environment variables to reference its DynamoDB tables:
+
+| Env Variable | Table Purpose | Used By |
+|---|---|---|
+| `PRODUCT_TABLE` | Product catalog | product-service, cart-service, order-service |
+| `CART_TABLE` | Shopping carts | cart-service, order-service |
+| `ORDER_TABLE` | Orders + indices | order-service, payment-service |
+| `PAYMENT_TABLE` | Payment records | payment-service |
+| `INVENTORY_TABLE` | Stock levels | inventory-service, cart-service |
+| `DYNAMODB_TABLE_NAME` | Idempotency locks | All services |
+| `ORDER_QUEUE_URL` | SQS queue URL | order-service |
+
+### DynamoDB Key Schema (single-table design patterns):
+```
+PRODUCT#<productId>  /  METADATA          → Product record
+CART#<userId>        /  ITEM#<productId>  → Cart item
+ORDER#<orderId>      /  METADATA          → Order record
+USER#<userId>        /  ORDER#<orderId>   → Order index (per user)
+INVENTORY#<productId> / STOCK            → Stock record
+PAYMENT#<paymentId>  /  METADATA          → Payment record
+IDEMPOTENCY#<key>   /  LOCK              → Idempotency lock
 ```
 
-Move into the project directory:
+---
 
+## 🚀 Running Locally
+
+### Frontend
 ```bash
-cd backend
-```
-
-Install dependencies:
-
-```bash
+cd frontend
 npm install
+npm run dev
+# Runs at http://localhost:5173
+```
+
+### Lambda services (local testing)
+Each service is a standalone Lambda. To test locally:
+```bash
+cd cart-service
+npm install
+# Use AWS SAM or serverless-offline for local Lambda invocation
 ```
 
 ---
 
-## ⚙️ Environment Variables
+## 📦 Frontend Dependencies
 
-Create a `.env` file inside the `backend` directory.
-
-Example:
-
-```env
-PORT=3000
-```
-
-Add any additional variables required by your application.
-
----
-
-## 📌 Current Modules
-
-* Product Management
-* Customer Management
-* Shopping Cart
-* Orders
-* Payments
-* Inventory
+| Package | Purpose |
+|---------|---------|
+| `aws-amplify` v6 | Cognito auth (signIn, fetchAuthSession) |
+| `axios` | HTTP client with interceptors |
+| `react-router-dom` v7 | Client-side routing |
+| `@tanstack/react-query` | Server state management |
+| `framer-motion` | Animations |
+| `lucide-react` | Icon library |
+| `tailwindcss` v4 | Utility-first CSS |
+| `react-hook-form` + `zod` | Form validation |
 
 ---
 
-## 🔮 Future Improvements
+## ⚠️ Error Response Reference
 
-* Authentication and Authorization
-* Database Integration
-* API Documentation
-* Docker Support
-* Complete Microservices Architecture
-* Frontend Integration
+| Status | Meaning |
+|--------|---------|
+| `200` | Success |
+| `201` | Resource created |
+| `400` | Bad request / missing parameters |
+| `401` | No authentication credentials |
+| `403` | Unauthorized / insufficient role |
+| `404` | Resource not found |
+| `409` | Conflict (duplicate order, insufficient stock) |
+| `422` | Validation error |
+| `500` | Internal Lambda execution error |
+
+---
+
+## 📋 Roadmap
+
+- [x] Cognito JWT integration (Access + ID token)
+- [x] User role injection via request headers
+- [x] Product catalog with API pagination
+- [x] Cart CRUD (add, update, remove, clear)
+- [x] Order placement from cart (transactional)
+- [x] Payment intent creation (internal)
+- [x] Order history page (live API)
+- [x] Profile page with Cognito user data
+- [x] Admin dashboard with live stats
+- [ ] Cognito `custom:role` and `custom:businessId` attributes
+- [ ] Order cancellation UI
+- [ ] Inventory availability on product pages
+- [ ] Admin product management UI
+- [ ] Payment capture/refund admin UI
+- [ ] Email notifications via SES
+- [ ] B2B bulk import UI
+- [ ] Docker / SAM local development setup
 
 ---
 
 ## 👨‍💻 Author
 
-Developed as part of the **JewelCart** project using **Node.js**.
-
----
+Developed as part of the **JewelCart** project — a cloud-native luxury jewelry e-commerce platform using AWS serverless architecture.
 
 ## 📄 License
 
 This project is intended for learning and development purposes.
-
-----------------------------
-
-## 🌐 API Overview
-
-The backend currently exposes RESTful APIs for the following modules.
-
-### Health
-
-| Method | Endpoint  | Description          |
-| ------ | --------- | -------------------- |
-| GET    | `/health` | Check backend status |
-
----
-
-### Products
-
-| Method | Endpoint               | Description          |
-| ------ | ---------------------- | -------------------- |
-| GET    | `/products`            | Get all products     |
-| GET    | `/products/:productId` | Get a product by ID  |
-| POST   | `/products`            | Create a new product |
-
----
-
-### Cart
-
-| Method | Endpoint                 | Description               |
-| ------ | ------------------------ | ------------------------- |
-| GET    | `/cart`                  | Get current user's cart   |
-| GET    | `/cart/summary`          | Get cart summary          |
-| POST   | `/cart/items`            | Add item to cart          |
-| PUT    | `/cart/items/:productId` | Update cart item quantity |
-| DELETE | `/cart/items/:productId` | Remove item from cart     |
-| DELETE | `/cart/clear`            | Clear cart                |
-| POST   | `/cart/bulk-import`      | Bulk import cart items    |
-
----
-
-### Orders
-
-| Method | Endpoint                  | Description        |
-| ------ | ------------------------- | ------------------ |
-| GET    | `/orders`                 | Get all orders     |
-| GET    | `/orders/:orderId`        | Get order details  |
-| POST   | `/orders`                 | Create a new order |
-| PUT    | `/orders/:orderId/cancel` | Cancel an order    |
-
----
-
-### Inventory
-
-| Method | Endpoint                | Description                  |
-| ------ | ----------------------- | ---------------------------- |
-| GET    | `/inventory`            | View inventory               |
-| GET    | `/inventory/:productId` | View inventory for a product |
-| POST   | `/inventory`            | Add inventory record         |
-| PATCH  | `/inventory/reserve`    | Reserve product stock        |
-
----
-
-### Payments
-
-| Method | Endpoint              | Description              |
-| ------ | --------------------- | ------------------------ |
-| GET    | `/payments`           | List payments            |
-| POST   | `/payments`           | Create payment           |
-| POST   | `/payments/intent`    | Create payment intent    |
-| POST   | `/payments/verify`    | Verify payment           |
-| POST   | `/payments/capture`   | Capture payment          |
-| POST   | `/payments/refund`    | Refund payment           |
-| POST   | `/payments/cancel`    | Cancel payment           |
-| POST   | `/payments/po-verify` | Verify purchase order    |
-| POST   | `/payments/webhook`   | Payment provider webhook |
-
----
-
-## ⚠️ Error Responses
-
-The API uses standard HTTP status codes.
-
-| Status Code | Meaning                   |
-| ----------- | ------------------------- |
-| 200         | Request successful        |
-| 201         | Resource created          |
-| 400         | Bad request               |
-| 403         | Unauthorized or forbidden |
-| 404         | Resource not found        |
-| 409         | Conflict                  |
-| 422         | Validation failed         |
-
----
-
-## 📝 Notes
-
-* Responses are returned in **JSON** format.
-* Configuration values are stored in the `.env` file.
-* Some endpoints require authentication or admin privileges.
-* This project currently contains the backend implementation only. Frontend integration and further modularization will be added in future updates.

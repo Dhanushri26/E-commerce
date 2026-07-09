@@ -17,10 +17,33 @@ async function handleLogin() {
       password,
     });
 
+    console.log("========== SIGN IN RESULT ==========");
+    console.log(result);
+    console.log("isSignedIn:", result.isSignedIn);
+    console.log("nextStep:", result.nextStep);
     if (result.isSignedIn) {
-    onLogin();
-    return;
-}
+      console.log("✅ User is signed in.");
+
+      const session = await fetchAuthSession();
+
+      console.log("========== SESSION ==========");
+      console.log(session);
+
+      console.log("========== TOKENS ==========");
+      console.log(session.tokens);
+
+      console.log("========== ID TOKEN ==========");
+      console.log(session.tokens?.idToken?.toString());
+
+      console.log("========== ACCESS TOKEN ==========");
+      console.log(session.tokens?.accessToken?.toString());
+
+      setMessage("Login Successful");
+
+      onLogin();
+
+      return;
+    }
 
     if (
       result.nextStep?.signInStep ===
@@ -30,18 +53,23 @@ async function handleLogin() {
       return;
     }
 
-    setMessage("Logged in!");
-    onLogin?.()
   } catch (err) {
 
-  if (err.name === "UserAlreadyAuthenticatedException") {
-    onLogin();
-    return;
-  }
+    if (err.name === "UserAlreadyAuthenticatedException") {
+      console.log("Already logged in.");
 
-  console.error(err);
-  setMessage(err.message);
-}
+      const session = await fetchAuthSession();
+
+      console.log(session);
+
+      onLogin();
+
+      return;
+    }
+
+    console.error(err);
+    setMessage(err.message);
+  }
 }
 
 async function handleNewPassword() {
@@ -62,22 +90,23 @@ async function getSession() {
   try {
     const session = await fetchAuthSession();
 
-    console.log("SESSION", session);
+    console.log("Complete Session:");
+    console.log(session);
 
-    console.log("Access Token");
-    console.log(session.tokens?.accessToken?.toString());
+    console.log("Tokens:");
+    console.log(session.tokens);
 
-    console.log("ID Token");
-    console.log(session.tokens?.idToken?.toString());
+    console.log("Access Token:");
+    console.log(session.tokens?.accessToken);
 
-    console.log("Claims");
-    console.log(session.tokens?.idToken?.payload);
+    console.log("ID Token:");
+    console.log(session.tokens?.idToken);
 
-    setMessage("Session printed in console.");
   } catch (err) {
     console.error(err);
   }
 }
+
   return (
     <div style={{ padding: 40 }}>
       <h2>Login Test</h2>
