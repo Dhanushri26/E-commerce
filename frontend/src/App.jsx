@@ -6,7 +6,7 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import AppRoutes from "./routes/AppRoutes";
 import { AppProvider } from "./context/AppContext";
 import { ErrorBoundary } from "./components/ui/error-boundary";
-import LoginTest from "./pages/LoginTest";
+import LoginPage from "./pages/LoginPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,7 +54,7 @@ function App() {
       </QueryClientProvider>
     </ErrorBoundary>
   ) : (
-    <LoginTest onLogin={() => setIsLoggedIn(true)} />
+    <LoginPage onLogin={() => setIsLoggedIn(true)} />
   );
 }
 

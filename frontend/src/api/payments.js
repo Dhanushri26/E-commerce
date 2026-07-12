@@ -80,3 +80,13 @@ export const verifyPurchaseOrder = async (data) => {
   const response = await api.post("/payments/po-verify", data);
   return response.data;
 };
+
+/**
+ * Update payment metadata and status.
+ * @param {string} paymentId 
+ * @param {object} data - e.g. { paymentStatus: 'PAID' }
+ */
+export const updatePayment = async (paymentId, data) => {
+  const response = await api.put(`/payments/${paymentId}`, data);
+  return response.data;
+};
