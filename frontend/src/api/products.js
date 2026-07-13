@@ -22,6 +22,11 @@ export const getProductById = async (productId) => {
   return response.data;
 };
 
+
+export const createProduct = async (data) => {
+  const response = await api.post("/products", data);
+  return response.data;
+};  
 /**
  * Normalize a Lambda product record to the frontend shape used by pages.
  * Lambda returns: { productId, title, msrp, isActive, ... }
