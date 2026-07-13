@@ -13,11 +13,16 @@ import { AboutPage } from '../pages/AboutPage'
 import { ContactPage } from '../pages/ContactPage'
 import { OffersPage } from '../pages/OffersPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
+import AdminRoute from "../components/AdminRoute";
 
-export default function AppRoutes() {
+export default function AppRoutes({ initialRoute}) {
   return (
     <Routes>
       <Route element={<MainLayout />}>
+      <Route
+  path="/"
+  element={<Navigate to={initialRoute} replace />}
+/>
         <Route path="/" element={<HomePage />} />
         <Route path="/jewelry" element={<ProductsPage />} />
         <Route path="/collections" element={<ProductsPage />} />
@@ -33,7 +38,14 @@ export default function AppRoutes() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/wishlist" element={<WishlistPage />} />
       </Route>
-      <Route path="/admin" element={<AdminPage />} />
+      <Route
+  path="/admin"
+  element={
+    <AdminRoute>
+      <AdminPage />
+    </AdminRoute>
+  }
+/>
       <Route path="/404" element={<NotFoundPage />} />
       <Route path="*" element={<Navigate to="/404" replace />} />
     </Routes>

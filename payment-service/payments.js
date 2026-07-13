@@ -314,16 +314,17 @@ ExpressionAttributeValues: {
     if (method === "PUT" && path.startsWith("/payments/")) {
       const paymentId = getPathParam(event, 1);
       if (!paymentId) return createErrorResponse(400, "Payment id is required");
-      if (!canManagePayments(userContext)) return createErrorResponse(403, "Access denied");
 
       const body = parseJsonBody(event);
       const existing = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: paymentTable,
         Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" }
       }));
       if (!existing.Item || existing.Item.isDeleted) return createErrorResponse(404, "Payment record not found");
 
       const payment = existing.Item;
+      if (!canAccessPayment(userContext, payment)) return createErrorResponse(403, "Access denied");
+
       const now = new Date().toISOString();
       const updates = [];
       const exprValues = { ":now": now, ":uid": userContext.userId };

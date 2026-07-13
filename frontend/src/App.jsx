@@ -20,6 +20,7 @@ const queryClient = new QueryClient({
 function App() {
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [initialRoute, setInitialRoute] = useState("/");
 
   useEffect(() => {
     async function checkSession() {
@@ -27,8 +28,22 @@ function App() {
         const session = await fetchAuthSession();
 
         if (session.tokens?.accessToken) {
-          setIsLoggedIn(true);
-        }
+  const idToken = session.tokens.idToken?.toString();
+
+  if (idToken) {
+    const payload = JSON.parse(atob(idToken.split(".")[1]));
+
+    const groups = payload["cognito:groups"] || [];
+
+    if (groups.includes("Admin")) {
+      setInitialRoute("/admin");
+    } else {
+      setInitialRoute("/");
+    }
+  }
+
+  setIsLoggedIn(true);
+}
       } catch (err) {
         console.log("No existing session");
       } finally {
@@ -48,7 +63,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <AppProvider>
           <BrowserRouter>
-            <AppRoutes />
+            <AppRoutes initialRoute={initialRoute} />
           </BrowserRouter>
         </AppProvider>
       </QueryClientProvider>
