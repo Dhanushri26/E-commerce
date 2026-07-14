@@ -46,7 +46,7 @@ export function AppProvider({ children }) {
   // ── Auth / User ──
   const [user, setUser] = useState(null);
   // user = { userId, email, role, name }
-
+const [authLoading, setAuthLoading] = useState(true);
   // ── Cart ──
   const [cart, setCart] = useState([]);
   const [cartLoading, setCartLoading] = useState(false);
@@ -79,6 +79,8 @@ export function AppProvider({ children }) {
         });
       } catch {
         // Session unavailable
+      } finally {
+        setAuthLoading(false);
       }
     }
     loadUser();
@@ -219,6 +221,7 @@ export function AppProvider({ children }) {
     () => ({
       // auth
       user,
+      authLoading,
       // cart
       cart,
       cartLoading,

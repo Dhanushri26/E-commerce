@@ -21,6 +21,7 @@ export function HomePage() {
       const data = await getProducts();
       console.log("Fetched products:", data);
       const items = data.items || [];
+      // items = items.filter(item => item.badge === "New Arrival");
       setProducts(items);
     } catch (err) {
       console.error(err);
@@ -95,7 +96,7 @@ if (error) {
           <Link to="/jewelry" className="hidden text-sm font-semibold text-stone-700 hover:text-amber-700 md:block">Browse All</Link>
         </div>
         <div className="mt-8 grid gap-6 md:grid-cols-3">
-          {products.map((product) => (
+          {products.filter(product => product.badge === "New Arrival").map((product) => (
             <div key={product.id} className="overflow-hidden rounded-[1.5rem] border border-stone-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
               <img src={product.image} alt={product.name} className="h-60 w-full object-cover" />
               <div className="p-6">

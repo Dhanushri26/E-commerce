@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { fetchAuthSession } from "aws-amplify/auth";
@@ -22,37 +22,39 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [initialRoute, setInitialRoute] = useState("/");
 
-  useEffect(() => {
-    async function checkSession() {
-      try {
-        const session = await fetchAuthSession();
+  const checkSession = useCallback(async () => {
+    setLoading(true);
 
-        if (session.tokens?.accessToken) {
-  const idToken = session.tokens.idToken?.toString();
+    try {
+      const session = await fetchAuthSession();
 
-  if (idToken) {
-    const payload = JSON.parse(atob(idToken.split(".")[1]));
+      if (session.tokens?.accessToken) {
+        const idToken = session.tokens.idToken?.toString();
 
-    const groups = payload["cognito:groups"] || [];
+        if (idToken) {
+          const payload = JSON.parse(atob(idToken.split(".")[1]));
+          const groups = payload["cognito:groups"] || [];
 
-    if (groups.includes("Admin")) {
-      setInitialRoute("/admin");
-    } else {
-      setInitialRoute("/");
-    }
-  }
+          if (groups.includes("Admin")) {
+            setInitialRoute("/admin");
+          } else {
+            setInitialRoute("/");
+          }
+        }
 
-  setIsLoggedIn(true);
-}
-      } catch (err) {
-        console.log("No existing session");
-      } finally {
-        setLoading(false);
+        setIsLoggedIn(true);
+        return;
       }
+    } catch (err) {
+      console.log("No existing session");
+    } finally {
+      setLoading(false);
     }
-
-    checkSession();
   }, []);
+
+  useEffect(() => {
+    checkSession();
+  }, [checkSession]);
 
   if (loading) {
     return <h2>Loading...</h2>;
@@ -69,7 +71,7 @@ function App() {
       </QueryClientProvider>
     </ErrorBoundary>
   ) : (
-    <LoginPage onLogin={() => setIsLoggedIn(true)} />
+    <LoginPage onLogin={checkSession} />
   );
 }
 
