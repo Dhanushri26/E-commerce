@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
   GetCommand,
   QueryCommand,
-  UpdateCommand
+  UpdateCommand,
+  ScanCommand
 } from "@aws-sdk/lib-dynamodb";
 import {
   buildResponse,
@@ -60,65 +61,126 @@ const sqs = new SQSClient({
 // MAIN AWS LAMBDA HANDLER
 // ==========================================
 export const handler = async (event) => {
+  console.log(JSON.stringify(event, null, 2));
+  console.log("HANDLER STARTED");
   try {
     const method = event?.httpMethod || event?.requestContext?.httpMethod || event?.requestContext?.http?.method;
     const path = event?.rawPath || event?.path || "";
+
+    if (method === "OPTIONS") {
+      return buildResponse(200, { success: true });
+  }
+
     const userContext = extractUserContext(event);
+
+    console.log("Method:", method);
+console.log("Path:", path);
+
+console.log("Headers:");
+console.log(JSON.stringify(event.headers, null, 2));
+
+console.log("Authorizer:");
+console.log(JSON.stringify(event.requestContext?.authorizer, null, 2));
+
+console.log("User Context:");
+console.log(JSON.stringify(userContext, null, 2));
+
     const {
       docClient,
       orderTable,
       cartTable,
       productTable
     } = getDbClient();
+    console.log({
+      orderTable,
+      cartTable,
+      productTable,
+      sharedTable: process.env.DYNAMODB_TABLE_NAME,
+      queue: process.env.ORDER_QUEUE_URL
+  });
+
+   if (method === "POST" && path === "/orders") {
 
     if (!userContext.isAuthenticated) {
-      return createErrorResponse(403, "Authentication required");
+        return createErrorResponse(401, "Authentication required");
     }
 
-    // ------------------------------------------
-    // GET /orders (List History)
-    // ------------------------------------------
-    if (method === "GET" && path === "/orders") {
-      let orders = [];
+}
 
-      if (userContext.isAdmin) {
-        // Admin scan fallback or secondary index lookup
-        const result = await docClient.send(new QueryCommand({
+// ------------------------------------------
+// GET /orders (List History)
+// ------------------------------------------
+if (method === "GET" && path === "/orders") {
+  let orders = [];
+
+  if (userContext.isAdmin) {
+
+    // Return only ORDER metadata records
+    const result = await docClient.send(
+      new ScanCommand({
+        TableName: orderTable,
+        FilterExpression:
+          "begins_with(PK, :pk) AND SK = :sk",
+        ExpressionAttributeValues: {
+          ":pk": "ORDER#",
+          ":sk": "METADATA",
+        },
+      })
+    );
+
+    orders = result.Items || [];
+
+  } else {
+
+    const partitionKey =
+      userContext.isBusiness && userContext.businessId
+        ? `BUSINESS#${userContext.businessId}`
+        : `USER#${userContext.userId}`;
+
+    // Fetch order references for this user/business
+    const trackingIndex = await docClient.send(
+      new QueryCommand({
+        TableName: orderTable,
+        KeyConditionExpression:
+          "PK = :pk AND begins_with(SK, :skPrefix)",
+        FilterExpression:
+          "attribute_not_exists(isDeleted)",
+        ExpressionAttributeValues: {
+          ":pk": partitionKey,
+          ":skPrefix": "ORDER#",
+        },
+      })
+    );
+
+    // Fetch actual order metadata
+    for (const indexDoc of trackingIndex.Items || []) {
+
+      const orderRes = await docClient.send(
+        new GetCommand({
           TableName: orderTable,
-          KeyConditionExpression: "begins_with(PK, :orderPrefix)",
-          FilterExpression: "SK = :meta AND attribute_not_exists(isDeleted)",
-          ExpressionAttributeValues: { ":orderPrefix": "ORDER#", ":meta": "METADATA" }
-        }));
-        orders = result.Items || [];
-      } else {
-        const partitionKey = userContext.isBusiness && userContext.businessId
-          ? `BUSINESS#${userContext.businessId}`
-          : `USER#${userContext.userId}`;
+          Key: {
+            PK: `ORDER#${indexDoc.orderId}`,
+            SK: "METADATA",
+          },
+        })
+      );
 
-        // Fetch user or business inverted routing indices
-        const trackingIndex = await docClient.send(new QueryCommand({
-          TableName: orderTable,
-          KeyConditionExpression: "PK = :pk AND begins_with(SK, :skPrefix)",
-          FilterExpression: "attribute_not_exists(isDeleted)",
-          ExpressionAttributeValues: { ":pk": partitionKey, ":skPrefix": "ORDER#" }
-        }));
-
-        // Hydrate full orders metadata using isolated reads
-        for (const indexDoc of trackingIndex.Items || []) {
-          const orderRes = await docClient.send(new GetCommand({
-            TableName: orderTable,
-            Key: { PK: `ORDER#${indexDoc.orderId}`, SK: "METADATA" }
-          }));
-          if (orderRes.Item && !orderRes.Item.isDeleted) {
-            orders.push(orderRes.Item);
-          }
-        }
+      if (orderRes.Item && !orderRes.Item.isDeleted) {
+        orders.push(orderRes.Item);
       }
-
-      orders.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-      return buildResponse(200, { orders: orders.map(buildOrderResponse) });
     }
+  }
 
+  orders.sort(
+    (a, b) =>
+      new Date(b.createdAt || 0) -
+      new Date(a.createdAt || 0)
+  );
+
+  return buildResponse(200, {
+    orders: orders.map(buildOrderResponse),
+  });
+}
     // ------------------------------------------
     // GET /orders/{id} (Inspect Variant)
     // ------------------------------------------

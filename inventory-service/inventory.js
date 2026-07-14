@@ -166,43 +166,100 @@ ExpressionAttributeValues:{
     // PUT /inventory/{productId} (Update Fields)
     // ------------------------------------------
     if (method === "PUT" && path.startsWith("/inventory/")) {
+
       const productId = getPathParam(event, 1);
-      if (!productId) return createErrorResponse(400, "Product specification missing");
-      if (!canManageInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
-
+    
+      if (!productId)
+        return createErrorResponse(400, "Product specification missing");
+    
+      if (!canManageInventory(userContext))
+        return createErrorResponse(403, "Access unauthorized");
+    
       const body = parseJsonBody(event);
-      const updateExpressions = [];
-      const expressionAttributeValues = {
-  ":now": new Date().toISOString(),
-};
+    
+      // Read existing inventory
+      const existing = await docClient.send(
+        new GetCommand({
+          TableName: inventoryTable,
+          Key: {
+            PK: `INVENTORY#${productId}`,
+            SK: "STOCK",
+          },
+        })
+      );
+    
+      if (!existing.Item)
+        return createErrorResponse(404, "Inventory not found");
+    
+      const availableQuantity =
+        body.availableQuantity !== undefined
+          ? normalizeQuantity(body.availableQuantity)
+          : existing.Item.availableQuantity;
+    
+      const reservedQuantity =
+        body.reservedQuantity !== undefined
+          ? normalizeQuantity(body.reservedQuantity)
+          : existing.Item.reservedQuantity;
+    
+      const damagedQuantity =
+        body.damagedQuantity !== undefined
+          ? normalizeQuantity(body.damagedQuantity)
+          : existing.Item.damagedQuantity;
+    
+      const reorderThreshold =
+        body.reorderThreshold !== undefined
+          ? normalizeQuantity(body.reorderThreshold)
+          : existing.Item.reorderThreshold;
+    
+          let inventoryStatus = "IN_STOCK";
 
-      if (body.availableQuantity !== undefined) {
-        updateExpressions.push("availableQuantity = :aq");
-        expressionAttributeValues[":aq"] = normalizeQuantity(body.availableQuantity);
-      }
-      if (body.reservedQuantity !== undefined) {
-        updateExpressions.push("reservedQuantity = :rq");
-        expressionAttributeValues[":rq"] = normalizeQuantity(body.reservedQuantity);
-      }
-      if (body.damagedQuantity !== undefined) {
-        updateExpressions.push("damagedQuantity = :dq");
-        expressionAttributeValues[":dq"] = normalizeQuantity(body.damagedQuantity);
-      }
-
-      if (updateExpressions.length === 0) return createErrorResponse(400, "Updatable parameters missing");
-
-      const expressionString = `SET ${updateExpressions.join(", ")}, updatedAt = :now`;
-
-      const result = await docClient.send(new UpdateCommand({
-        TableName: inventoryTable,
-        Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
-        UpdateExpression: expressionString,
-        ConditionExpression:"attribute_exists(PK)",
-        ExpressionAttributeValues: expressionAttributeValues,
-        ReturnValues: "ALL_NEW"
-      }));
-
-      return buildResponse(200, buildInventoryResponse(result.Attributes));
+          if (availableQuantity <= 0) {
+              inventoryStatus = "OUT_OF_STOCK";
+          }
+          else if (
+              availableQuantity <=
+              normalizeQuantity(body.reorderThreshold)
+          ) {
+              inventoryStatus = "LOW_STOCK";
+          }
+    
+      const result = await docClient.send(
+        new UpdateCommand({
+          TableName: inventoryTable,
+          Key: {
+            PK: `INVENTORY#${productId}`,
+            SK: "STOCK",
+          },
+    
+          UpdateExpression: `
+            SET
+            availableQuantity = :aq,
+            reservedQuantity = :rq,
+            damagedQuantity = :dq,
+            reorderThreshold = :rt,
+            inventoryStatus = :status,
+            updatedAt = :now
+          `,
+    
+          ExpressionAttributeValues: {
+            ":aq": availableQuantity,
+            ":rq": reservedQuantity,
+            ":dq": damagedQuantity,
+            ":rt": reorderThreshold,
+            ":status": inventoryStatus,
+            ":now": new Date().toISOString(),
+          },
+    
+          ConditionExpression: "attribute_exists(PK)",
+    
+          ReturnValues: "ALL_NEW",
+        })
+      );
+    
+      return buildResponse(
+        200,
+        buildInventoryResponse(result.Attributes)
+      );
     }
 
     // ------------------------------------------

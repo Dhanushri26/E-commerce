@@ -125,7 +125,7 @@ export default function OrdersPanel() {
 
                   <td className="px-6 py-4">
 
-                    {order.customerName ? `#${order.customerName.substring(0,8).toUpperCase()}` : "Missing info"}
+                    {order.userId ? `#${order.userId.substring(0,8).toUpperCase()}` : "Missing info"}
 
                   </td>
 

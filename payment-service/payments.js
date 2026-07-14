@@ -30,8 +30,17 @@ import {
 // BUSINESS LOGIC & PERMISSION DOMAINS
 // ==========================================
 const canReadPayments = (user) => user.isAdmin || user.isBusiness || user.isCustomer;
-const canManagePayments = (user) => user.isAdmin;
+const canManagePayments = (user, payment) => {
+  if (user.isAdmin) return true;
 
+  if (user.isCustomer)
+      return payment.ownerId === user.userId;
+
+  if (user.isBusiness)
+      return payment.businessId === user.businessId;
+
+  return false;
+};
 const canAccessPayment = (user, payment) => {
   if (!payment) return false;
   if (user.isAdmin) return true;
@@ -297,7 +306,7 @@ ExpressionAttributeValues: {
       if (!paymentId) return createErrorResponse(400, "Payment id is required");
 
       const res = await docClient.send(new GetCommand({
-        TableName: tableName,
+        TableName: paymentTable,
         Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" }
       }));
 
@@ -313,18 +322,29 @@ ExpressionAttributeValues: {
     // ------------------------------------------
     if (method === "PUT" && path.startsWith("/payments/")) {
       const paymentId = getPathParam(event, 1);
-      if (!paymentId) return createErrorResponse(400, "Payment id is required");
 
-      const body = parseJsonBody(event);
-      const existing = await docClient.send(new GetCommand({
+if (!paymentId)
+    return createErrorResponse(400, "Payment id is required");
+
+const body = parseJsonBody(event);
+
+const existing = await docClient.send(
+    new GetCommand({
         TableName: paymentTable,
-        Key: { PK: `PAYMENT#${paymentId}`, SK: "PAYMENT" }
-      }));
-      if (!existing.Item || existing.Item.isDeleted) return createErrorResponse(404, "Payment record not found");
+        Key: {
+            PK: `PAYMENT#${paymentId}`,
+            SK: "PAYMENT"
+        }
+    })
+);
 
-      const payment = existing.Item;
-      if (!canAccessPayment(userContext, payment)) return createErrorResponse(403, "Access denied");
+const payment = existing.Item;
 
+if (!payment || payment.isDeleted)
+    return createErrorResponse(404, "Payment record not found");
+
+if (!canManagePayments(userContext, payment))
+    return createErrorResponse(403, "Access denied");
       const now = new Date().toISOString();
       const updates = [];
       const exprValues = { ":now": now, ":uid": userContext.userId };
@@ -375,32 +395,82 @@ ExpressionAttributeValues: {
       return buildResponse(200, { message: "Payment status processed successfully" });
     }
 
-    // ------------------------------------------
-    // POST /payments/intent (Create Checkout Intent)
-    // ------------------------------------------
-    if (method === "POST" && path === "/payments/intent") {
-      if (!userContext.isAuthenticated) return createErrorResponse(403, "Authentication required");
+   // ------------------------------------------
+// POST /payments/intent (Create Checkout Intent)
+// ------------------------------------------
+if (method === "POST" && path === "/payments/intent") {
 
-      const body = parseJsonBody(event);
-      const orderId = body.orderId || body.order_id;
-      if (!orderId) return createErrorResponse(422, "orderId is required");
+  if (!userContext.isAuthenticated)
+    return createErrorResponse(403, "Authentication required");
 
-      const orderRes = await docClient.send(new GetCommand({
-        TableName: orderTable,
-        Key: { PK: `ORDER#${orderId}`, SK: "METADATA" }
-      }));
-      if (!orderRes.Item || orderRes.Item.isDeleted) return createErrorResponse(404, "Target checkout order missing");
+  const body = parseJsonBody(event);
 
-      return buildResponse(201, {
-        paymentId: randomUUID(),
-        orderId,
-        amount: orderRes.Item.totalAmount,
-        currency: "USD",
-        paymentStatus: PAYMENT_STATUS.PENDING,
-        clientSecret: `pi_test_${orderId}_secret`,
-      });
-    }
+  const orderId = body.orderId || body.order_id;
 
+  if (!orderId)
+    return createErrorResponse(422, "orderId is required");
+
+  const orderRes = await docClient.send(
+    new GetCommand({
+      TableName: orderTable,
+      Key: {
+        PK: `ORDER#${orderId}`,
+        SK: "METADATA"
+      }
+    })
+  );
+
+  if (!orderRes.Item || orderRes.Item.isDeleted)
+    return createErrorResponse(404, "Target checkout order missing");
+
+  const order = orderRes.Item;
+
+  const paymentId = randomUUID();
+
+  const now = new Date().toISOString();
+
+  const paymentDoc = {
+    PK: `PAYMENT#${paymentId}`,
+    SK: "PAYMENT",
+
+    paymentId,
+    orderId,
+
+    ownerId: userContext.userId,
+    businessId: userContext.businessId || null,
+
+    amount: order.totalAmount,
+    currency: "USD",
+
+    paymentMethod: "CARD",
+    paymentStatus: PAYMENT_STATUS.PENDING,
+
+    transactionReference: null,
+
+    isDeleted: false,
+
+    createdAt: now,
+    updatedAt: now,
+
+    ...createAuditFields(userContext.userId)
+  };
+
+  await docClient.send(
+    new PutCommand({
+      TableName: paymentTable,
+      Item: paymentDoc
+    })
+  );
+
+  return buildResponse(201, {
+    paymentId,
+    orderId,
+    amount: paymentDoc.amount,
+    currency: paymentDoc.currency,
+    paymentStatus: paymentDoc.paymentStatus,
+    clientSecret: `pi_test_${orderId}_secret`
+  });
+}
     // ------------------------------------------
     // POST /payments/refund (Issue Balance Refund)
     // ------------------------------------------

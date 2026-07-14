@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Pencil, Trash2 } from "lucide-react";
-import { getProducts } from "../../api/products";
+import { getProducts ,updateProduct} from "../../api/products";
 import { createProduct } from "../../api/products";
 import { createInventory } from "../../api/inventory";
 
@@ -9,6 +9,8 @@ const [products, setProducts] = useState([]);
 const [loading, setLoading] = useState(true);
 const [search, setSearch] = useState("");
 const [showProductModal, setShowProductModal] = useState(false);
+const [editingProduct, setEditingProduct] = useState(null);
+const [editMode, setEditMode] = useState(false);
 
 const [productForm, setProductForm] = useState({
   title: "",
@@ -64,6 +66,67 @@ const filteredProducts = useMemo(() => {
   );
 }, [products, search]);
 
+function openEditProduct(product) {
+
+  setEditMode(true);
+
+  setEditingProduct(product);
+
+  setProductForm({
+    title: product.title,
+    category: product.category,
+    description: product.description,
+    image: product.image,
+    badge: product.badge,
+    msrp: product.msrp,
+    track_type: product.track_type,
+    is_b2b_only: product.is_b2b_only,
+  });
+
+  setShowProductModal(true);
+}
+
+async function handleUpdateProduct() {
+
+    try {
+
+        setSaving(true);
+
+        await updateProduct(
+            editingProduct.id,
+            {
+                title: productForm.title,
+                category: productForm.category,
+                description: productForm.description,
+                image: productForm.image,
+                badge: productForm.badge,
+                msrp: Number(productForm.msrp),
+                track_type: productForm.track_type,
+                is_b2b_only: productForm.is_b2b_only,
+            }
+        );
+
+        await loadProducts();
+
+        setShowProductModal(false);
+
+        setEditMode(false);
+
+        setEditingProduct(null);
+
+    } catch (err) {
+
+        console.error(err);
+
+        alert("Unable to update product");
+
+    } finally {
+
+        setSaving(false);
+
+    }
+
+}
 
 async function handleCreateProduct() {
   try {
@@ -237,7 +300,7 @@ async function handleCreateProduct() {
                     </div>
 
                     <div className="text-xs text-stone-500">
-                      {product.id}
+                      {product.id ? `#${product.id.substring(0, 8).toUpperCase()}` : "N/A"}
                     </div>
 
                   </td>
@@ -248,7 +311,7 @@ async function handleCreateProduct() {
 
                   <td className="px-5 py-4">
 
-                    <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs text-amber-400">
+                    <span className="rounded-full bg-amber-500/10 px-2 py-1 text-xs text-amber-300">
                       {product.badge}
                     </span>
 
@@ -270,9 +333,12 @@ async function handleCreateProduct() {
 
                     <div className="flex justify-end gap-3">
 
-                      <button className="text-blue-400 hover:text-blue-300">
-                        <Pencil size={18} />
-                      </button>
+                      <button
+  onClick={() => openEditProduct(product)}
+  className="text-blue-400 hover:text-blue-300"
+>
+    <Pencil size={18}/>
+</button>
 
                       <button className="text-red-400 hover:text-red-300">
                         <Trash2 size={18} />
@@ -298,7 +364,7 @@ async function handleCreateProduct() {
     <div className="w-full max-w-2xl rounded-2xl bg-stone-900 p-8">
 
       <h2 className="mb-6 text-2xl font-semibold text-white">
-        Add Product
+        {editMode ? "Edit Product" : "Add Product"}
       </h2>
 
       <div className="grid gap-5">
@@ -410,7 +476,15 @@ async function handleCreateProduct() {
       <div className="mt-8 flex justify-end gap-3">
 
         <button
-          onClick={() => setShowProductModal(false)}
+          onClick={() => {
+
+    setShowProductModal(false);
+
+    setEditMode(false);
+
+    setEditingProduct(null);
+
+}}
           className="rounded-lg border border-stone-700 px-5 py-2 text-white"
         >
           Cancel
@@ -418,10 +492,18 @@ async function handleCreateProduct() {
 
         <button
           disabled={saving}
-          onClick={handleCreateProduct}
+          onClick={
+    editMode
+        ? handleUpdateProduct
+        : handleCreateProduct
+}
           className="rounded-lg bg-amber-500 px-5 py-2 font-semibold text-black"
         >
-          {saving ? "Creating..." : "Create Product"}
+          {saving
+    ? "Saving..."
+    : editMode
+    ? "Update Product"
+    : "Create Product"}
         </button>
 
       </div>

@@ -161,34 +161,55 @@ export const parseIdempotencyKey = (event) => {
 // ==========================================
 
 export const extractUserContext = (event) => {
-
   const headers = event?.headers || {};
 
-  const role =
-    headers["x-user-role"] ||
-    headers["X-User-Role"] ||
-    "Customer";
+  // JWT claims injected by API Gateway JWT Authorizer
+  const claims =
+    event?.requestContext?.authorizer?.jwt?.claims ||
+    event?.requestContext?.authorizer?.claims ||
+    {};
 
+  // User ID
   const userId =
+    claims.sub ||
     headers["x-user-id"] ||
     headers["X-User-Id"] ||
     "anonymous";
 
+  // Role
+  let role =
+    headers["x-user-role"] ||
+    headers["X-User-Role"] ||
+    "Customer";
+
+// If Cognito groups exist, use them
+const groups = claims["cognito:groups"];
+
+if (groups) {
+  const groupList = Array.isArray(groups)
+    ? groups
+    : String(groups)
+        .replace(/[\[\]]/g, "") // remove [ ]
+        .split(",")
+        .map((g) => g.trim());
+
+  if (groupList.includes("Admin")) {
+    role = "Admin";
+  } else if (groupList.includes("Business")) {
+    role = "Business";
+  } else {
+    role = "Customer";
+  }
+}
+
+  // Business ID
   const businessId =
+    claims["custom:businessId"] ||
     headers["x-business-id"] ||
     headers["X-Business-Id"] ||
     null;
 
-  const creditLimit = Number(
-    headers["x-credit-limit"] || 0
-  );
-
-  const taxExempt =
-    String(headers["x-tax-exempt"] || "false")
-      .toLowerCase() === "true";
-
   return {
-
     isAuthenticated: userId !== "anonymous",
 
     userId,
@@ -197,18 +218,17 @@ export const extractUserContext = (event) => {
 
     role,
 
-    creditLimit,
+    creditLimit: Number(headers["x-credit-limit"] || 0),
 
-    taxExempt,
+    taxExempt:
+      String(headers["x-tax-exempt"] || "false").toLowerCase() === "true",
 
     isAdmin: role === ROLES.ADMIN,
 
     isBusiness: role === ROLES.BUSINESS,
 
     isCustomer: role === ROLES.CUSTOMER,
-
   };
-
 };
 
 

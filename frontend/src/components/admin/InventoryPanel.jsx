@@ -241,7 +241,7 @@ async function saveInventory() {
                 >
 
                   <td className="px-6 py-4 font-mono text-sm">
-                    {item.productId}
+                    {item.productId ? `#${item.productId.substring(0, 8).toUpperCase()}` : "N/A"}
                   </td>
 
                   <td className="px-6 py-4">

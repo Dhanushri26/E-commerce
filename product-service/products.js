@@ -90,13 +90,39 @@ const validateTiers = (tiers) => {
   }
   return null;
 };
+const validateCategory = (category) => {
+  if (category === undefined) return null;
+  if (typeof category !== "string") return "category must be a string";
+  return null;
+};
 
+const validateDescription = (description) => {
+  if (description === undefined) return null;
+  if (typeof description !== "string") return "description must be a string";
+  return null;
+};
+
+const validateImage = (image) => {
+  if (image === undefined) return null;
+  if (typeof image !== "string") return "image must be a string";
+  return null;
+};
+
+const validateBadge = (badge) => {
+  if (badge === undefined) return null;
+  if (typeof badge !== "string") return "badge must be a string";
+  return null;
+};
 const validateCreateBody = (body) => [
   validateTitle(body.title, { required: true }),
+  validateCategory(body.category),
+  validateDescription(body.description),
+  validateImage(body.image),
+  validateBadge(body.badge),
   validateMsrp(body.msrp, { required: true }),
   validateTrackType(body.track_type),
   validateProductId(body.id),
-  validateTiers(body.tiers)
+  validateTiers(body.tiers),
 ].filter(Boolean);
 
 // ==========================================
@@ -125,6 +151,10 @@ export const handler = async (event) => {
     const path = event?.rawPath || event?.path || "";
     const userContext = extractUserContext(event);
     const { docClient, tableName } = getDbClient();
+
+    if(method === "OPTIONS") {
+      return buildResponse(200, { success: true});
+    }
 
     // ------------------------------------------
     // GET /products (List Catalogue)
@@ -251,16 +281,31 @@ try {
         const metadataItem = {
           PK: `PRODUCT#${productId}`,
           SK: "METADATA",
+        
           id: productId,
+        
           title: body.title.trim(),
           titleNormalized,
+        
+          category: body.category || "",
+          description: body.description || "",
+          image: body.image || "",
+          badge: body.badge || "",
+        
           msrp: body.msrp,
+        
           is_b2b_only: Boolean(body.is_b2b_only),
+        
           track_type: body.track_type || "UNIQUE",
+        
           createdAt: now,
           updatedAt: now,
+        
           ownerId: userContext.userId,
-          businessId: body.businessId?.trim() || (userContext.isBusiness ? userContext.businessId : null),
+          businessId:
+            body.businessId?.trim() ||
+            (userContext.isBusiness ? userContext.businessId : null),
+        
           createdBy: userContext.userId,
           updatedBy: userContext.userId,
         };
