@@ -4,15 +4,40 @@ import { Heart, Search, SlidersHorizontal } from 'lucide-react'
 import { useAppContext } from '../context/AppContext'
 import { getProducts } from '../api/products'
 import {addCartItem} from '../api/cart'
+import {useLocation} from 'react-router-dom'
+
 const categories = ['Jewelry', 'Gemstones', 'Collections', 'New Arrivals']
 
 export function ProductsPage() {
   const [query, setQuery] = useState('')
-  const [category, setCategory] = useState('All')
   const [sort, setSort] = useState('featured')
   const { addToCart, addToWishlist } = useAppContext()
   const [error, setError] = useState("");
   const [products, setProducts] = useState([]);
+
+  const location = useLocation();
+
+const getInitialCategory = () => {
+  switch (location.pathname) {
+    case "/jewelry":
+      return "Jewelry";
+    case "/gemstones":
+      return "Gemstones";
+    case "/collections":
+      return "Collections";
+    case "/new-arrivals":
+      return "New Arrivals";
+    default:
+      return "All";
+  }
+};
+
+const [category, setCategory] = useState(getInitialCategory);
+
+useEffect(() => {
+  setCategory(getInitialCategory());
+}, [location.pathname]);
+
 
  useEffect(() => {
   const fetchProducts = async () => {
@@ -24,7 +49,6 @@ export function ProductsPage() {
   name: product.title,
   price: product.msrp,
 }));
-setProducts(items);
       setProducts(items);
     } catch (err) {
       console.error(err);
@@ -43,8 +67,21 @@ const filteredProducts = useMemo(() => {
           .toLowerCase()
           .includes(query.toLowerCase());
 
-      const matchesCategory =
-        category === "All" || product.category === category;
+      let matchesCategory = true;
+
+      if (category === "Jewelry") {
+        matchesCategory =
+          product.category !== "Gemstones";
+      } else if (category === "Gemstones") {
+        matchesCategory =
+          product.category === "Gemstones";
+      } else if (category === "Collections") {
+        matchesCategory =
+          product.badge != null;
+      } else if (category === "New Arrivals") {
+        matchesCategory =
+          product.badge === "New Arrival";
+      }
 
       return matchesQuery && matchesCategory;
     })

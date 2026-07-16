@@ -23,7 +23,7 @@ export function MainLayout() {
             })}
           </nav>
           <div className="flex items-center gap-3">
-            <button className="rounded-full border border-stone-200 p-2.5 text-stone-600"><Search size={18} /></button>
+            {/* <button className="rounded-full border border-stone-200 p-2.5 text-stone-600"><Search size={18} /></button> */}
             <Link to="/wishlist" className="relative rounded-full border border-stone-200 p-2.5 text-stone-600"><Heart size={18} />{wishlist.length > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-amber-600 px-1.5 py-0.5 text-[10px] text-white">{wishlist.length}</span>}</Link>
             <Link to="/cart" className="relative rounded-full border border-stone-200 p-2.5 text-stone-600"><ShoppingBag size={18} />{cart.length > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-amber-600 px-1.5 py-0.5 text-[10px] text-white">{cart.reduce((sum, item) => sum + item.quantity, 0)}</span>}</Link>
             <Link to="/profile" className="rounded-full border border-stone-200 p-2.5 text-stone-600"><UserRound size={18} /></Link>

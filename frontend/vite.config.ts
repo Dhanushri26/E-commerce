@@ -6,6 +6,12 @@ const API_TARGET = process.env.VITE_API_TARGET || 'https://fpgg90w2y8.execute-ap
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/setupTests.js',
+    css: true,
+  },
   server: {
     proxy: {
       '/api': {
