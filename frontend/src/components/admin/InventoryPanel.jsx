@@ -5,9 +5,14 @@ import {
   Search,
   AlertTriangle,
 } from "lucide-react";
-
+import {
+  CircleCheck,
+  TriangleAlert,
+  CircleX,
+} from "lucide-react";
 import { getInventory } from "../../api/inventory";
 import {updateInventory} from "../../api/inventory";
+import { getProducts } from "../../api/products";
 
 export default function InventoryPanel() {
   const [inventory, setInventory] = useState([]);
@@ -22,18 +27,38 @@ const [form, setForm] = useState({
   reorderThreshold: 5,
 });
 
-  async function loadInventory() {
-    setLoading(true);
+async function loadInventory() {
+  setLoading(true);
 
-    try {
-      const data = await getInventory();
-      setInventory(data.items || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+  try {
+    const [inventoryResponse, productsResponse] =
+      await Promise.all([
+        getInventory(),
+        getProducts(),
+      ]);
+
+    const inventory = inventoryResponse.items || [];
+    const products = productsResponse.items || [];
+
+    const productMap = {};
+
+    products.forEach((product) => {
+      productMap[product.id] = product;
+    });
+
+    const merged = inventory.map((item) => ({
+      ...item,
+      product: productMap[item.productId],
+    }));
+
+    setInventory(merged);
+
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setLoading(false);
   }
+}
 async function seedInventory() {
   try {
     const productsResponse = await getProducts();
@@ -83,7 +108,7 @@ async function seedInventory() {
     const existingInventory = new Set(
       inventory.map((item) => item.productId)
     );
-
+  
     let created = 0;
 
     for (const product of products) {
@@ -93,6 +118,7 @@ async function seedInventory() {
 
       await createInventory({
         productId: product.id,
+
         availableQuantity: 0,
         reservedQuantity: 0,
         damagedQuantity: 0,
@@ -143,6 +169,8 @@ async function saveInventory() {
 
       {/* Header */}
 
+
+
      <div className="flex items-center justify-between">
 
   <div>
@@ -174,6 +202,19 @@ async function saveInventory() {
         />
 
       </div>
+            {inventory.some(
+        (i) => i.inventoryStatus === "LOW_STOCK"
+      ) && (
+
+        <div className="flex items-center gap-3 rounded-xl border border-yellow-800 bg-yellow-900/20 p-4 text-yellow-300">
+
+          <AlertTriangle size={18} />
+
+          Some inventory items are below the reorder threshold.
+
+        </div>
+
+      )}
 
       {/* Table */}
 
@@ -186,6 +227,8 @@ async function saveInventory() {
             <tr className="text-left text-sm text-stone-300">
 
               <th className="px-6 py-4">Product</th>
+
+              <th className="px-6 py-4">Image</th>
 
               <th className="px-6 py-4">Available</th>
 
@@ -241,7 +284,15 @@ async function saveInventory() {
                 >
 
                   <td className="px-6 py-4 font-mono text-sm">
-                    {item.productId ? `#${item.productId.substring(0, 8).toUpperCase()}` : "N/A"}
+                    {item.product.title ? item.product.title : "N/A"}
+                  </td>
+
+                  <td className="px-6 py-4">
+                    <img
+                      src={item.product?.image}
+                      alt={item.product?.name}
+                      className="h-12 w-12 rounded-lg object-cover"
+                    />
                   </td>
 
                   <td className="px-6 py-4">
@@ -259,24 +310,25 @@ async function saveInventory() {
                   <td className="px-6 py-4">
                     {item.reorderThreshold}
                   </td>
-
-                  <td className="px-6 py-4">
-
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-medium
-                      ${
-                        item.inventoryStatus === "IN_STOCK"
-                          ? "bg-green-900 text-green-300"
-                          : item.inventoryStatus === "LOW_STOCK"
-                          ? "bg-yellow-900 text-yellow-300"
-                          : "bg-red-900 text-red-300"
-                      }`}
-                    >
-                      {item.inventoryStatus.replaceAll("_", " ")}
-                    </span>
-
-                  </td>
-
+<td className="px-6 py-4">
+  <div title="In Stock">
+  {item.inventoryStatus === "IN_STOCK" && (
+    <CircleCheck 
+    className="text-green-500" size={20} 
+    />
+  )}
+  </div>
+  <div title="Low Stock">
+  {item.inventoryStatus === "LOW_STOCK" && (
+    <TriangleAlert className="text-yellow-500" size={20} />
+  )}
+</div>
+<div title = "Out of Stock">
+  {item.inventoryStatus === "OUT_OF_STOCK" && (
+    <CircleX className="text-red-500" size={20} />
+  )}
+  </div>
+</td>
                   <td className="px-6 py-4">
 
                     <button
@@ -311,19 +363,7 @@ async function saveInventory() {
 
       {/* Warning */}
 
-      {inventory.some(
-        (i) => i.inventoryStatus === "LOW_STOCK"
-      ) && (
-
-        <div className="flex items-center gap-3 rounded-xl border border-yellow-800 bg-yellow-900/20 p-4 text-yellow-300">
-
-          <AlertTriangle size={18} />
-
-          Some inventory items are below the reorder threshold.
-
-        </div>
-
-      )}
+      
 {editingItem && (
   <div className="fixed inset-0 flex items-center justify-center bg-black/60">
 
