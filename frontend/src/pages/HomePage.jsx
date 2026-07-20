@@ -1,143 +1,338 @@
-import { Link } from 'react-router-dom'
-import { ArrowRight, BadgeCheck, Gem, ShieldCheck, Sparkles, Truck } from 'lucide-react'
+ import { Link } from 'react-router-dom'
+import { ArrowRight, Truck, ShieldCheck, RotateCcw, Headphones, Zap, TrendingUp, Star } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { useEffect, useState } from "react";
-import { getProducts} from "../api/products";
+import { useEffect, useState, useMemo } from 'react'
+import { getProducts, normalizeProduct } from '../api/products'
+import { ProductCard } from '../components/ProductCard'
+import { ProductGridSkeleton } from '../components/ui/Skeleton'
+import { ErrorState } from '../components/ui/EmptyState'
+import { Button } from '../components/ui/Button'
+import { Badge } from '../components/ui/Badge'
+import { useAppContext } from '../context/AppContext'
+import { CATEGORIES, POPULAR_BRANDS } from '../constants/brand'
 
-const featuredCollections = [
-  { title: 'Bridal Collection', description: 'Heirloom-inspired bridal jewelry for unforgettable vows.' },
-  { title: 'Limited Edition', description: 'Exclusive drops with rare gemstone craftsmanship.' },
-  { title: 'Luxury Watches', description: 'Swiss-inspired precision with a sculptural silhouette.' },
-]
+function normalizeItems(items) {
+  return items.map(normalizeProduct)
+}
+
+function ProductSection({ title, subtitle, products, badge, viewAllLink }) {
+  const { addToCart, addToWishlist, wishlist } = useAppContext()
+
+  if (products.length === 0) return null
+
+  return (
+    <section className="mx-auto max-w-7xl px-4 py-12 lg:px-8">
+      <div className="flex items-end justify-between">
+        <div>
+          {badge && (
+            <Badge variant="primary" className="mb-2">
+              {badge}
+            </Badge>
+          )}
+          <h2 className="text-2xl font-bold text-slate-900 lg:text-3xl">{title}</h2>
+          {subtitle && <p className="mt-1 text-slate-500">{subtitle}</p>}
+        </div>
+        {viewAllLink && (
+          <Link
+            to={viewAllLink}
+            className="hidden items-center gap-1 text-sm font-semibold text-indigo-600 hover:text-indigo-700 md:flex"
+          >
+            View All <ArrowRight size={16} />
+          </Link>
+        )}
+      </div>
+      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {products.slice(0, 4).map((product) => (
+          <ProductCard
+            key={product.id}
+            product={product}
+            onAddToCart={addToCart}
+            onAddToWishlist={addToWishlist}
+            isWishlisted={wishlist.some(
+              (w) => w.id === product.id || w.productId === product.id
+            )}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
 
 export function HomePage() {
-    const [products, setProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
+  const [products, setProducts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-    useEffect(() => {
-  const fetchProducts = async () => {
-    try {
-      const data = await getProducts();
-      console.log("Fetched products:", data);
-      const items = data.items || [];
-      // items = items.filter(item => item.badge === "New Arrival");
-      setProducts(items);
-    } catch (err) {
-      console.error(err);
-      setError("Unable to load products.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    getProducts()
+      .then((data) => setProducts(normalizeItems(data.items || [])))
+      .catch(() => setError('Unable to load products.'))
+      .finally(() => setLoading(false))
+  }, [])
 
-  fetchProducts();
-}, []);
-useEffect(() => {
-    console.log("Products changed:", products);
-  }, [products]);
-if (loading) {
-  return (
-    <div className="flex h-[60vh] items-center justify-center">
-      Loading products...
-    </div>
-  );
-}
-if (error) {
-  return (
-    <div className="flex h-[60vh] items-center justify-center text-red-600">
-      {error}
-    </div>
-  );
-}
-  return (
-    <div className="pb-20">
-      <section className="mx-auto grid max-w-7xl gap-8 px-4 py-10 lg:grid-cols-[1.15fr_0.85fr] lg:px-8 lg:py-16">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="rounded-[2rem] bg-stone-900 p-10 text-white shadow-[0_40px_80px_rgba(39,25,16,0.2)] lg:p-14">
-          <p className="text-sm uppercase tracking-[0.4em] text-amber-300">Luxury Reimagined</p>
-          <h1 className="mt-4 text-4xl leading-tight sm:text-5xl lg:text-6xl">Fine jewelry designed for modern heirlooms.</h1>
-          <p className="mt-6 max-w-xl text-lg text-stone-300">Discover signature rings, sculptural necklaces, and rare gemstones curated for everyday radiance and grand occasions.</p>
-          <div className="mt-8 flex flex-wrap gap-4">
-            <Link to="/jewelry" className="rounded-full bg-amber-500 px-6 py-3 font-medium text-stone-950 transition hover:bg-amber-400">Shop Collection</Link>
-            <Link to="/products/1" className="rounded-full border border-white/20 px-6 py-3 font-medium text-white transition hover:bg-white/10">Explore Best Sellers</Link>
-          </div>
-        </motion.div>
-        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="overflow-hidden rounded-[2rem] border border-stone-200 bg-white shadow-[0_25px_60px_rgba(97,70,38,0.12)]">
-          <img src="https://heerhaarjewellery.com/wp-content/uploads/2026/03/Untitled-design.jpg" alt="Luxury jewelry showcase" className="h-full min-h-[420px] w-full object-cover" />
-        </motion.div>
-      </section>
+  const newArrivals = useMemo(
+    () => products.filter((p) => p.badge === 'New Arrival'),
+    [products]
+  )
+  const bestSellers = useMemo(
+    () => [...products].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)),
+    [products]
+  )
+  const trending = useMemo(
+    () => [...products].sort((a, b) => (b.reviews ?? 0) - (a.reviews ?? 0)),
+    [products]
+  )
+  const deals = useMemo(
+    () => products.filter((p) => (p.discount ?? 0) > 0),
+    [products]
+  )
+  const recentlyAdded = useMemo(() => products.slice(-8).reverse(), [products])
 
-      <section className="mx-auto max-w-7xl px-4 py-10 lg:px-8">
-        <div className="flex items-end justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-amber-700">Featured Collections</p>
-            <h2 className="mt-2 text-3xl text-stone-800">Signature moments, beautifully framed.</h2>
-          </div>
-          <Link to="/jewelry" className="hidden text-sm font-semibold text-stone-700 hover:text-amber-700 md:block">View All</Link>
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-10 lg:px-8">
+        <div className="skeleton-shimmer h-80 rounded-3xl" />
+        <div className="mt-12">
+          <ProductGridSkeleton count={4} />
         </div>
-        <div className="mt-8 grid gap-6 md:grid-cols-3">
-          {featuredCollections.map((collection) => (
-            <div key={collection.title} className="rounded-[1.5rem] border border-stone-200 bg-white p-6 shadow-sm">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700"><Sparkles /></div>
-              <h3 className="text-2xl text-stone-800">{collection.title}</h3>
-              <p className="mt-3 text-sm leading-7 text-stone-600">{collection.description}</p>
-              <Link to="/jewelry" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-amber-700">Shop now <ArrowRight size={16} /></Link>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-20 lg:px-8">
+        <ErrorState description={error} onRetry={() => window.location.reload()} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="pb-8">
+      {/* Hero Banner */}
+      <section className="mx-auto max-w-7xl px-4 py-8 lg:px-8 lg:py-12">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 p-8 text-white shadow-2xl lg:p-12"
+          >
+            <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+            <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-indigo-400/20 blur-2xl" />
+            <div className="relative">
+              <Badge className="bg-white/20 text-white backdrop-blur-sm">
+                Summer Sale — Up to 40% Off
+              </Badge>
+              <h1 className="mt-6 text-4xl font-bold leading-tight lg:text-5xl">
+                Shop smarter.<br />Live better.
+              </h1>
+              <p className="mt-4 max-w-md text-lg text-indigo-100">
+                Discover thousands of products across fashion, electronics, home, and more — all in one place.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link to="/products">
+                  <Button className="bg-white text-indigo-700 hover:bg-indigo-50">
+                    Shop Now
+                  </Button>
+                </Link>
+                <Link to="/offers">
+                  <Button variant="outline" className="border-white/30 text-white hover:bg-white/10">
+                    View Deals
+                  </Button>
+                </Link>
+              </div>
             </div>
-          ))}
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, x: 24 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.15 }}
+            className="relative overflow-hidden rounded-3xl shadow-xl"
+          >
+            <img
+              src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=1200&q=80"
+              alt="Shopping experience"
+              className="h-full min-h-[320px] w-full object-cover"
+            />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900/80 to-transparent p-6">
+              <p className="text-sm font-medium text-white/80">Featured Collection</p>
+              <p className="text-xl font-bold text-white">Trending This Week</p>
+            </div>
+          </motion.div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-10 lg:px-8">
-        <div className="flex items-end justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-amber-700">New Arrivals</p>
-            <h2 className="mt-2 text-3xl text-stone-800">Freshly crafted pieces for special occasions.</h2>
-          </div>
-          <Link to="/jewelry" className="hidden text-sm font-semibold text-stone-700 hover:text-amber-700 md:block">Browse All</Link>
-        </div>
-        <div className="mt-8 grid gap-6 md:grid-cols-3">
-          {products.filter(product => product.badge === "New Arrival").map((product) => (
-            <div key={product.id} className="overflow-hidden rounded-[1.5rem] border border-stone-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
-              <img src={product.image} alt={product.name} className="h-60 w-full object-cover" />
-              <div className="p-6">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm uppercase tracking-[0.3em] text-stone-500">{product.category}</p>
-                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">{product.badge}</span>
-                </div>
-                <h3 className="mt-3 text-xl text-stone-800">{product.name}</h3>
-                <p className="mt-2 text-sm text-stone-600">{product.description}</p>
-                <div className="mt-4 flex items-center justify-between">
-                  <p className="text-lg font-semibold text-stone-900">₹{product.msrp ? product.msrp.toLocaleString() : "N/A"}</p>
-                  <Link to={`/products/${product.id}`} className="text-sm font-semibold text-amber-700">View</Link>
-                </div>
+      {/* Trust badges */}
+      <section className="border-y border-slate-200 bg-white">
+        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-4 px-4 py-6 sm:grid-cols-4 lg:px-8">
+          {[
+            { icon: Truck, label: 'Free Shipping', sub: 'On orders ₹1,500+' },
+            { icon: ShieldCheck, label: 'Secure Payment', sub: '100% protected' },
+            { icon: RotateCcw, label: 'Easy Returns', sub: '30-day policy' },
+            { icon: Headphones, label: '24/7 Support', sub: 'Dedicated help' },
+          ].map(({ icon: Icon, label, sub }) => (
+            <div key={label} className="flex items-center gap-3 px-2">
+              <div className="rounded-xl bg-indigo-50 p-2.5 text-indigo-600">
+                <Icon size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{label}</p>
+                <p className="text-xs text-slate-500">{sub}</p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-10 lg:px-8">
-        <div className="rounded-[2rem] border border-stone-200 bg-white p-8 shadow-sm lg:p-10">
-          <div className="grid gap-6 lg:grid-cols-[1fr_0.7fr]">
-            <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-amber-700">Certified Jewelry</p>
-              <h2 className="mt-2 text-3xl text-stone-800">Trusted craftsmanship, ethically sourced gemstones, and timeless design.</h2>
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                {[
-                  { icon: BadgeCheck, title: 'Hallmarked Gold', text: 'Verified purity with official hallmarking.' },
-                  { icon: Gem, title: 'Conflict-Free Diamonds', text: 'Ethically sourced stones and transparent provenance.' },
-                  { icon: ShieldCheck, title: 'Secure Checkout', text: 'Protected payments and insured delivery.' },
-                  { icon: Truck, title: 'Free Shipping', text: 'Complimentary express delivery on luxury pieces.' },
-                ].map((item) => {
-                  const Icon = item.icon
-                  return <div key={item.title} className="rounded-2xl bg-stone-50 p-4"><div className="mb-3 inline-flex rounded-full bg-amber-100 p-2 text-amber-700"><Icon /></div><h3 className="text-lg text-stone-800">{item.title}</h3><p className="mt-2 text-sm leading-7 text-stone-600">{item.text}</p></div>
-                })}
-              </div>
-            </div>
-            <div className="overflow-hidden rounded-[1.5rem]">
-              <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTKEzMIBp78YftiV0wmIDYv8KkYVKSYKbpUqgaNOYby1TwQzApAoBpqEo4&s=10" alt="Luxury jewelry closeup" className="h-full min-h-[320px] w-full object-cover" />
-            </div>
+      {/* Category Grid */}
+      <section className="mx-auto max-w-7xl px-4 py-12 lg:px-8">
+        <h2 className="text-2xl font-bold text-slate-900 lg:text-3xl">Shop by Category</h2>
+        <p className="mt-1 text-slate-500">Browse our curated collections</p>
+        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+          {CATEGORIES.map((cat, i) => (
+            <motion.div
+              key={cat.label}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+            >
+              <Link
+                to={cat.path}
+                className="group flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm transition hover:-translate-y-1 hover:border-indigo-200 hover:shadow-md"
+              >
+                <span className="text-3xl">{cat.icon}</span>
+                <p className="mt-3 text-sm font-semibold text-slate-800 group-hover:text-indigo-600">
+                  {cat.label}
+                </p>
+              </Link>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* Featured Collections */}
+      <section className="bg-slate-100/80 py-12">
+        <div className="mx-auto max-w-7xl px-4 lg:px-8">
+          <h2 className="text-2xl font-bold text-slate-900 lg:text-3xl">Featured Collections</h2>
+          <div className="mt-8 grid gap-6 md:grid-cols-3">
+            {[
+              {
+                title: 'Top Picks',
+                desc: 'Hand-picked favorites loved by shoppers',
+                image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRyQbvZLRO2VINVatXZCNzllGT34NhZrxogTSi8h2OXbg&s=10',
+                link: '/collections',
+              },
+              {
+                title: 'Limited Drops',
+                desc: 'Exclusive products available for a short time',
+                image: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=600&q=80',
+                link: '/new-arrivals',
+              },
+              {
+                title: 'Premium Selection',
+                desc: 'High-quality products for discerning buyers',
+                image: 'https://images.unsplash.com/photo-1472851294601-062e0248b36f?auto=format&fit=crop&w=600&q=80',
+                link: '/products',
+              },
+            ].map((col) => (
+              <Link
+                key={col.title}
+                to={col.link}
+                className="group overflow-hidden rounded-2xl bg-white shadow-sm transition hover:shadow-lg"
+              >
+                <div className="aspect-[16/10] overflow-hidden">
+                  <img
+                    src={col.image}
+                    alt={col.title}
+                    className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="p-5">
+                  <h3 className="text-lg font-bold text-slate-900">{col.title}</h3>
+                  <p className="mt-1 text-sm text-slate-500">{col.desc}</p>
+                  <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-indigo-600">
+                    Explore <ArrowRight size={14} />
+                  </span>
+                </div>
+              </Link>
+            ))}
           </div>
+        </div>
+      </section>
+
+      {/* Product sections */}
+      <ProductSection
+        title="Trending Now"
+        subtitle="Most popular products this week"
+        products={trending.length ? trending : products}
+        badge="Trending"
+        viewAllLink="/products"
+      />
+
+      <ProductSection
+        title="Best Sellers"
+        subtitle="Top-rated by our customers"
+        products={bestSellers}
+        badge="Best Sellers"
+        viewAllLink="/products"
+      />
+
+      <ProductSection
+        title="Today's Deals"
+        subtitle="Limited-time discounts you don't want to miss"
+        products={deals.length ? deals : products.slice(0, 4)}
+        badge="Deals"
+        viewAllLink="/offers"
+      />
+
+      <ProductSection
+        title="New Arrivals"
+        subtitle="Fresh products just added to our catalog"
+        products={newArrivals.length ? newArrivals : recentlyAdded}
+        badge="New"
+        viewAllLink="/new-arrivals"
+      />
+
+      <ProductSection
+        title="Recently Added"
+        subtitle="The latest additions to ShopSphere"
+        products={recentlyAdded}
+        viewAllLink="/products"
+      />
+
+      {/* Popular Brands */}
+      <section className="mx-auto max-w-7xl px-4 py-12 lg:px-8">
+        <h2 className="text-2xl font-bold text-slate-900">Popular Brands</h2>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+          {POPULAR_BRANDS.map((brand) => (
+            <div
+              key={brand}
+              className="flex h-16 min-w-[120px] items-center justify-center rounded-xl border border-slate-200 bg-white px-6 text-sm font-bold tracking-wide text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
+            >
+              {brand}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Promo banner */}
+      <section className="mx-auto max-w-7xl px-4 pb-12 lg:px-8">
+        <div className="overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 to-indigo-900 p-8 text-white lg:flex lg:items-center lg:justify-between lg:p-12">
+          <div>
+            <div className="flex items-center gap-2 text-indigo-300">
+              <Zap size={18} />
+              <span className="text-sm font-semibold uppercase tracking-wide">Flash Sale</span>
+            </div>
+            <h2 className="mt-3 text-3xl font-bold">Extra 20% off selected items</h2>
+            <p className="mt-2 text-slate-300">Use code SAVE20 at checkout. Limited time only.</p>
+          </div>
+          <Link to="/offers" className="mt-6 inline-block lg:mt-0">
+            <Button className="bg-white text-slate-900 hover:bg-slate-100">
+              Shop the Sale
+            </Button>
+          </Link>
         </div>
       </section>
     </div>

@@ -25,7 +25,7 @@ export default function DashboardPanel({
                 </span>
 
                 <Icon
-                  className="text-amber-500"
+                  className="text-indigo-400"
                   size={18}
                 />
               </div>
@@ -60,7 +60,7 @@ export default function DashboardPanel({
           <div className="mb-5 flex items-center gap-3">
             <Boxes
               size={20}
-              className="text-amber-500"
+              className="text-indigo-400"
             />
             <h2 className="text-xl font-medium">
               Inventory Overview
@@ -104,7 +104,7 @@ export default function DashboardPanel({
           <div className="mb-5 flex items-center gap-3">
             <ShoppingBag
               size={20}
-              className="text-amber-500"
+              className="text-indigo-400"
             />
             <h2 className="text-xl font-medium">
               Recent Orders

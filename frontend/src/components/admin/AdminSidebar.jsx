@@ -36,22 +36,22 @@ export default function AdminSidebar({
   setActiveNav,
 }) {
   return (
-    <aside className="w-full rounded-[1.5rem] border border-stone-800 bg-stone-900 p-6 lg:w-72">
-      <h1 className="text-2xl font-semibold tracking-[0.3em]">
-        JEWELCART ADMIN
+    <aside className="w-full rounded-[1.5rem] border border-slate-800 bg-slate-900 p-6 lg:w-72">
+      <h1 className="text-xl font-bold tracking-wider text-white">
+        <span className="text-indigo-400">Shop</span>Sphere Admin
       </h1>
 
       {user && (
-        <div className="mt-3 border-b border-stone-800 pb-4">
+        <div className="mt-3 border-b border-slate-800 pb-4">
           <p className="text-sm font-medium text-white">
             {user.name}
           </p>
 
-          <p className="mt-1 text-xs text-stone-500">
+          <p className="mt-1 text-xs text-slate-400">
             {user.email}
           </p>
 
-          <span className="mt-3 inline-flex rounded-full bg-amber-600/20 px-3 py-1 text-xs font-medium text-amber-400">
+          <span className="mt-3 inline-flex rounded-full bg-indigo-600/20 px-3 py-1 text-xs font-semibold text-indigo-400">
             {user.role}
           </span>
         </div>
@@ -67,10 +67,10 @@ export default function AdminSidebar({
             <button
               key={item}
               onClick={() => setActiveNav(item)}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 transition-all ${
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 font-medium transition-all ${
                 active
-                  ? "bg-amber-500 text-stone-950"
-                  : "text-stone-400 hover:bg-stone-800 hover:text-white"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
               }`}
             >
               <Icon size={18} />

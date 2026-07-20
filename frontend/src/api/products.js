@@ -56,17 +56,15 @@ export const normalizeProduct = (p) => ({
   image:
     p.imageUrl ??
     p.image ??
-    `https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=900&q=80`,
-  rating: p.rating ?? 4.8,
-  reviews: p.reviewCount ?? p.reviews ?? 120,
-  category: p.category ?? "Jewelry",
+    `https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80`,
+  rating: p.rating ?? 4.5,
+  reviews: p.reviewCount ?? p.reviews ?? 0,
+  category: p.category ?? "General",
   description:
     p.description ??
-    "Crafted in our atelier with certified stones and exceptional brilliance.",
+    "Quality product with great value and fast delivery.",
   stock: p.stock ?? 10,
   discount: p.discount ?? 0,
-  metal: p.metal ?? "Gold",
-  stone: p.stone ?? "Diamond",
-  purity: p.purity ?? "18K",
-  weight: p.weight ?? "3.5 g",
+  brand: p.brand ?? "ShopSphere",
+  specifications: p.specifications ?? {},
 });

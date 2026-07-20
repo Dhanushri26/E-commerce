@@ -36,6 +36,7 @@ export default function AppRoutes({ initialRoute }) {
             )
           }
         />
+        <Route path="products" element={<ProductsPage />} />
         <Route path="jewelry" element={<ProductsPage />} />
         <Route path="collections" element={<ProductsPage />} />
         <Route path="gemstones" element={<ProductsPage />} />
