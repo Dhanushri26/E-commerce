@@ -1,75 +1,59 @@
-# React + TypeScript + Vite
+# 🛒 ShopSphere Storefront Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The frontend for the **ShopSphere** modern e-commerce platform. Built with **React**, **Vite**, **React Router v7**, **Tailwind CSS v4**, and **TanStack React Query**, fully integrated with AWS Cognito and API Gateway microservices.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🎨 Design System & Aesthetic
+- **Indigo & Slate Theme:** Clean, neutral palette with vibrant highlights (Success: Emerald, Warning: Amber, Error: Red, Primary Accent: Indigo).
+- **Responsive Layouts:** Seamless support for Desktop, Tablet, and Mobile viewport sizes without layout shifts.
+- **Rich Visuals:** Rounded cards, dynamic hover micro-animations, custom scrollbars, and premium loading skeletons.
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🚀 Getting Started
 
-## Expanding the ESLint configuration
+### Prerequisites
+- Node.js (v18+)
+- npm or yarn
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+### Installation
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+### Run Locally (Development Mode)
+```bash
+npm run dev
 ```
+The server will boot up locally at `http://localhost:5173`.
+
+### Production Build
+To build the production bundle:
+```bash
+npm run build
+```
+This generates the optimized, production-ready bundle inside the `dist/` directory.
+
+### Run Unit Tests
+To run Vitest verification suite:
+```bash
+npm test
+```
+
+---
+
+## 📂 Architecture & Directory Details
+- `/src/api/` — API clients & Axios interceptors with Cognito token authorization headers injection.
+- `/src/components/` — Reusable components (`ProductCard`, `SearchBar`, etc.) and subfolders for UI elements & Admin panels.
+- `/src/context/` — Context API logic managing global cart, wishlist, orders, user authentication session states.
+- `/src/pages/` — Page level routing views (Home, Products, Details, Cart, Checkout, Profile, Wishlist, Admin).
+- `/src/routes/` — Application routing definitions (`AppRoutes.jsx`).
+- `/src/index.css` — Global CSS styling rules, custom animations, custom scrollbars, and Tailwind configuration.
+
+---
+
+## 📋 Technology Integrations
+- **AWS Cognito Auth:** Fully integrated using `@aws-amplify/auth` v6.
+- **REST APIs:** Axios client configured with CORS credentials proxy handles requests to Lambda endpoints.
+- **State Caching:** TanStack React Query handles network caches efficiently.
