@@ -1,0 +1,6 @@
+# Example configuration file for ShopSphere Terraform deployment
+# Rename or copy this file to 'terraform.tfvars' to override default values
+
+aws_region  = "ap-southeast-1"
+environment = "dev"
+app_name    = "shopsphere"
