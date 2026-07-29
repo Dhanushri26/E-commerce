@@ -1,6 +1,6 @@
-# 💎 JewelCart — Full-Stack Luxury Jewelry E-Commerce
+# 🛒 ShopSphere — Full-Stack Modern E-Commerce Platform
 
-JewelCart is a production-ready, cloud-native luxury jewelry e-commerce platform built on a **React + Vite** frontend backed by **AWS Lambda microservices** connected through a single **AWS API Gateway**, with authentication handled by **AWS Cognito**.
+ShopSphere is a production-ready, cloud-native general e-commerce platform built on a **React + Vite** frontend backed by **AWS Lambda microservices** connected through a single **AWS API Gateway**, with authentication handled by **AWS Cognito**.
 
 ---
 
@@ -36,7 +36,7 @@ JewelCart is a production-ready, cloud-native luxury jewelry e-commerce platform
 ## 📂 Project Structure
 
 ```
-JewelCart/
+ShopSphere/
 ├── frontend/                    # React + Vite SPA
 │   └── src/
 │       ├── api/
@@ -269,7 +269,7 @@ npm install
 
 ## 👨‍💻 Author
 
-Developed as part of the **JewelCart** project — a cloud-native luxury jewelry e-commerce platform using AWS serverless architecture.
+Developed as part of the **ShopSphere** project — a cloud-native general e-commerce platform using AWS serverless architecture.
 
 ## 📄 License
 
