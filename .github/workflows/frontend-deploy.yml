@@ -72,23 +72,23 @@ jobs:
       
       - name: Generate Deployment Summary
         run: |
-        {
-          echo "# 🚀 Frontend Deployment Summary"
-          echo ""
-          echo "## Build Information"
-          echo "- Status: ✅ Success"
-          echo "- Environment: Development"
-          echo "- Application: JewelCart Frontend"
-          echo "- Branch: $GITHUB_REF_NAME"
-          echo "- Commit: $GITHUB_SHA"
-          echo ""
-          echo "## Deployment"
-          echo "- Target: Amazon S3"
-          echo "- Bucket: jewelcart-frontend-dhanu"
-          echo "- CDN: CloudFront"
-          echo "- Distribution: E1VI1Y7VYK9QAO"
-          echo ""
-          echo "## Notes"
-          echo "- Deployment simulated because AWS Academy uses temporary SSO credentials."
-          echo "- Replace the simulation step with AWS deployment in a production AWS account."
-        } >> $GITHUB_STEP_SUMMARY
+          {
+            echo "# 🚀 Frontend Deployment Summary"
+            echo ""
+            echo "## Build Information"
+            echo "- Status: ✅ Success"
+            echo "- Environment: Development"
+            echo "- Application: JewelCart Frontend"
+            echo "- Branch: $GITHUB_REF_NAME"
+            echo "- Commit: $GITHUB_SHA"
+            echo ""
+            echo "## Deployment"
+            echo "- Target: Amazon S3"
+            echo "- Bucket: jewelcart-frontend-dhanu"
+            echo "- CDN: CloudFront"
+            echo "- Distribution: E1VI1Y7VYK9QAO"
+            echo ""
+            echo "## Notes"
+            echo "- Deployment simulated because AWS Academy uses temporary SSO credentials."
+            echo "- Replace the simulation step with AWS deployment in a production AWS account."
+          } >> $GITHUB_STEP_SUMMARY
