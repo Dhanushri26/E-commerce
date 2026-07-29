@@ -27,6 +27,9 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Run Unit Tests
+        run: npm test
+
       - name: Build React Application
         run: npm run build
 
@@ -46,7 +49,46 @@ jobs:
         with:
           name: frontend-build
           path: frontend/dist
-
+      
       - name: Verify Build
         run: ls -la dist
 
+      - name: Simulate Production Deployment
+        run: |
+          echo "====================================="
+          echo "🚀 Starting Frontend Deployment"
+          echo "====================================="
+          echo "Application    : JewelCart Frontend"
+          echo "Environment    : Development"
+          echo "Target Bucket  : jewelcart-frontend-dhanu"
+          echo "CloudFront ID  : E1VI1Y7VYK9QAO"
+          echo ""
+          echo "Uploading build..."
+          sleep 2
+          echo "Invalidating CloudFront cache..."
+          sleep 2
+          echo ""
+          echo "✅ Deployment completed successfully (Simulation)"
+      
+      - name: Generate Deployment Summary
+        run: |
+        {
+          echo "# 🚀 Frontend Deployment Summary"
+          echo ""
+          echo "## Build Information"
+          echo "- Status: ✅ Success"
+          echo "- Environment: Development"
+          echo "- Application: JewelCart Frontend"
+          echo "- Branch: $GITHUB_REF_NAME"
+          echo "- Commit: $GITHUB_SHA"
+          echo ""
+          echo "## Deployment"
+          echo "- Target: Amazon S3"
+          echo "- Bucket: jewelcart-frontend-dhanu"
+          echo "- CDN: CloudFront"
+          echo "- Distribution: E1VI1Y7VYK9QAO"
+          echo ""
+          echo "## Notes"
+          echo "- Deployment simulated because AWS Academy uses temporary SSO credentials."
+          echo "- Replace the simulation step with AWS deployment in a production AWS account."
+        } >> $GITHUB_STEP_SUMMARY
