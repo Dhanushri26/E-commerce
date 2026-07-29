@@ -24,7 +24,7 @@ The Terraform configuration is organized into 7 clean modules:
 
 1. **Terraform CLI**: Installed (`>= 1.5.0`). Check version via `terraform --version`.
 2. **AWS CLI**: Configured with appropriate AWS IAM permissions (`aws configure` or environment credentials).
-3. **Node.js**: Ready locally if you plan to modify or package Lambda code manually.
+3. **Node.js + npm**: Required locally because Terraform packages the Lambda services from `services/` during normal execution.
 
 ---
 
@@ -41,25 +41,36 @@ cp terraform.tfvars.example terraform.tfvars
 ```
 *(Optionally edit `terraform.tfvars` to customize your AWS region or environment name).*
 
-### 3. Initialize Terraform
+### 3. Install Lambda service dependencies
+Terraform packages the service directories as ZIPs, so install each service's dependencies before planning or applying:
+```bash
+cd ../services/product-service && npm ci
+cd ../cart-service && npm ci
+cd ../order-service && npm ci
+cd ../payment-service && npm ci
+cd ../inventory-service && npm ci
+cd ../../terraform
+```
+
+### 4. Initialize Terraform
 Initializes modules, providers (`hashicorp/aws`, `hashicorp/archive`, `hashicorp/random`), and backend state.
 ```bash
 terraform init
 ```
 
-### 4. Format & Validate HCL Code
+### 5. Format & Validate HCL Code
 ```bash
 terraform fmt -recursive
 terraform validate
 ```
 
-### 5. Plan Infrastructure Deployment
+### 6. Plan Infrastructure Deployment
 Generates an execution plan to preview all resources that will be created.
 ```bash
 terraform plan
 ```
 
-### 6. Apply & Provision AWS Resources
+### 7. Apply & Provision AWS Resources
 Applies the infrastructure configuration to AWS.
 ```bash
 terraform apply

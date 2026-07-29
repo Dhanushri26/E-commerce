@@ -55,7 +55,7 @@ module "lambda" {
   order_queue_url   = module.messaging.order_queue_url
   payment_topic_arn = module.messaging.payment_topic_arn
 
-  project_root_dir = "${path.module}/.."
+  project_root_dir = "${path.module}/../services"
 }
 
 module "api_gateway" {
