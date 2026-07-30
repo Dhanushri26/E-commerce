@@ -331,24 +331,33 @@ if (method === "GET" && path === "/orders") {
             Delete: { TableName: cartTable, Key: { PK: cartPartition, SK: item.SK } }
           });
         }
+        console.log("Starting DynamoDB transaction...");
 
        await docClient.send(
     new TransactWriteCommand({
         TransactItems: transactItems
     })
 );
+console.log("DynamoDB transaction completed successfully.");
+console.log("Sending ORDER_CREATED event to SQS...");
       await sqs.send(
     new SendMessageCommand({
         QueueUrl: process.env.ORDER_QUEUE_URL,
         MessageBody: JSON.stringify({
-            eventType: "ORDER_CREATED",
-            orderId: orderId,
-            userId: userContext.userId,
-            totalAmount: orderDoc.totalAmount,
-            createdAt: new Date().toISOString()
-        })
+          eventType: "ORDER_CREATED",
+          orderId: orderId,
+          userId: userContext.userId,
+          totalAmount: orderDoc.totalAmount,
+          createdAt: new Date().toISOString(),
+      
+          items: resolvedItems.map(item => ({
+              productId: item.productId,
+              quantity: item.quantity
+          }))
+      })
     })
 );
+console.log("ORDER_CREATED event sent successfully.");
         const responsePayload = { order: buildOrderResponse(orderDoc) };
         await releaseOrResolveLock(idempotencyKey, responsePayload);
         return buildResponse(201, responsePayload);

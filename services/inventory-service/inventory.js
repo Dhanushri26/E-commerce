@@ -58,7 +58,72 @@ const appendAuditRecord = async (docClient, tableName, productId, action, qty, u
 // MAIN AWS LAMBDA HANDLER
 // ==========================================
 export const handler = async (event) => {
+  
   try {
+
+    // ==========================================
+// SQS EVENT PROCESSING
+// ==========================================
+if (event.Records && event.Records[0]?.eventSource === "aws:sqs") {
+
+  console.log("Received SQS Event");
+  console.log(JSON.stringify(event, null, 2));
+
+  const { docClient, inventoryTable } = getDbClient();
+
+  for (const record of event.Records) {
+
+      const message = JSON.parse(record.body);
+
+      console.log("Message:", message);
+
+      if (message.eventType !== "ORDER_CREATED") {
+          continue;
+      }
+
+      for (const item of message.items) {
+
+        console.log(
+            `Updating inventory for ${item.productId} (Qty: ${item.quantity})`
+        );
+    
+        await docClient.send(
+            new UpdateCommand({
+                TableName: inventoryTable,
+                Key: {
+                    PK: `INVENTORY#${item.productId}`,
+                    SK: "STOCK",
+                },
+    
+                UpdateExpression: `
+                    SET
+                        availableQuantity = availableQuantity - :qty,
+                        updatedAt = :now
+                `,
+    
+                ConditionExpression: `
+                    attribute_exists(PK)
+                    AND availableQuantity >= :qty
+                `,
+    
+                ExpressionAttributeValues: {
+                    ":qty": Number(item.quantity),
+                    ":now": new Date().toISOString(),
+                },
+    
+                ReturnValues: "ALL_NEW",
+            })
+        );
+    
+        console.log(
+            `Inventory updated successfully for ${item.productId}`
+        );
+    }
+  }
+
+  return;
+}
+
     const method = event?.httpMethod || event?.requestContext?.httpMethod || event?.requestContext?.http?.method;
     const path = event?.rawPath || event?.path || "";
     const userContext = extractUserContext(event);
