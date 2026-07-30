@@ -24,6 +24,10 @@ The AWS resources in this project already exist. That means the normal real-worl
 4. Import the existing AWS resources into Terraform state.
 5. Run `terraform plan` again to verify Terraform matches reality.
 
+Before you import Lambda functions, keep the Lambda package variables empty or
+set them to real ZIP file paths. Do not paste `terraform import ...` commands
+into `terraform.tfvars`. Import commands belong in the terminal.
+
 Example import commands you will likely use:
 
 ```bash
@@ -36,6 +40,10 @@ terraform import module.notification_lambda.aws_lambda_function.this jewelcart-n
 ```
 
 You would do the same idea for API Gateway, DynamoDB, S3, SQS, SNS, and IAM resources. Importing is what allows Terraform to start managing resources that are already in your AWS account.
+
+If you have not created Lambda ZIP files yet, that is okay during the import
+step. This project allows the Lambda package variables to stay `null` until you
+are ready to manage Lambda code deployment with Terraform.
 
 ## Project Architecture
 

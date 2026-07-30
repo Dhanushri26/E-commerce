@@ -64,29 +64,71 @@ variable "api_stage_name" {
 variable "cart_lambda_package" {
   description = "Local path to the ZIP file for the cart Lambda deployment package."
   type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.cart_lambda_package == null || !startswith(lower(var.cart_lambda_package), "terraform import ")
+    error_message = "cart_lambda_package must be a ZIP file path like build/cart-service.zip, not a terraform import command."
+  }
 }
 
 variable "products_lambda_package" {
   description = "Local path to the ZIP file for the products Lambda deployment package."
   type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.products_lambda_package == null || !startswith(lower(var.products_lambda_package), "terraform import ")
+    error_message = "products_lambda_package must be a ZIP file path like build/product-service.zip, not a terraform import command."
+  }
 }
 
 variable "inventory_lambda_package" {
   description = "Local path to the ZIP file for the inventory Lambda deployment package."
   type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.inventory_lambda_package == null || !startswith(lower(var.inventory_lambda_package), "terraform import ")
+    error_message = "inventory_lambda_package must be a ZIP file path like build/inventory-service.zip, not a terraform import command."
+  }
 }
 
 variable "payment_lambda_package" {
   description = "Local path to the ZIP file for the payment Lambda deployment package."
   type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.payment_lambda_package == null || !startswith(lower(var.payment_lambda_package), "terraform import ")
+    error_message = "payment_lambda_package must be a ZIP file path like build/payment-service.zip, not a terraform import command."
+  }
 }
 
 variable "order_lambda_package" {
   description = "Local path to the ZIP file for the order Lambda deployment package."
   type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.order_lambda_package == null || !startswith(lower(var.order_lambda_package), "terraform import ")
+    error_message = "order_lambda_package must be a ZIP file path like build/order-service.zip, not a terraform import command."
+  }
 }
 
 variable "notification_lambda_package" {
   description = "Local path to the ZIP file for the notification Lambda deployment package."
   type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.notification_lambda_package == null || !startswith(lower(var.notification_lambda_package), "terraform import ")
+    error_message = "notification_lambda_package must be a ZIP file path like build/notification-service.zip, not a terraform import command."
+  }
 }

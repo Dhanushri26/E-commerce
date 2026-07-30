@@ -17,8 +17,10 @@ variable "function_name" {
 }
 
 variable "filename" {
-  description = "The local path to the ZIP deployment package for this Lambda."
+  description = "The local path to the ZIP deployment package for this Lambda. This can be null during the first import step."
   type        = string
+  default     = null
+  nullable    = true
 }
 
 variable "runtime" {
