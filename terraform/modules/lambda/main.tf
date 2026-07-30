@@ -18,10 +18,13 @@ resource "aws_lambda_function" "this" {
   function_name = var.function_name
 
   # filename tells Terraform which local ZIP file contains the Lambda code.
+  # We allow null during the initial import stage because the Lambda may
+  # already exist in AWS before a local deployment package exists.
   filename = var.filename
 
   # source_code_hash helps Terraform detect when the ZIP file contents changed.
-  source_code_hash = filebase64sha256(var.filename)
+  # We only calculate the hash when a real file path is available.
+  source_code_hash = var.filename != null ? filebase64sha256(var.filename) : null
 
   # runtime tells AWS which language runtime should execute the code.
   runtime = var.runtime
