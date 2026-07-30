@@ -55,8 +55,8 @@ locals {
 
   # These exact identifiers help us avoid circular dependencies between the
   # Lambda functions and the event-driven services that connect to them.
-  order_queue_arn = "arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${local.order_queue_name}"
-  order_queue_url = "https://sqs.${var.aws_region}.amazonaws.com/${data.aws_caller_identity.current.account_id}/${local.order_queue_name}"
+  order_queue_arn   = "arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${local.order_queue_name}"
+  order_queue_url   = "https://sqs.${var.aws_region}.amazonaws.com/${data.aws_caller_identity.current.account_id}/${local.order_queue_name}"
   payment_topic_arn = "arn:aws:sns:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${local.payment_topic_name}"
 
   common_tags = merge(
@@ -253,16 +253,16 @@ module "api_gateway" {
   aws_region = var.aws_region
   tags       = local.common_tags
 
-  cart_lambda_name           = module.cart_lambda.function_name
-  cart_lambda_invoke_arn     = module.cart_lambda.invoke_arn
-  products_lambda_name       = module.products_lambda.function_name
-  products_lambda_invoke_arn = module.products_lambda.invoke_arn
-  inventory_lambda_name      = module.inventory_lambda.function_name
+  cart_lambda_name            = module.cart_lambda.function_name
+  cart_lambda_invoke_arn      = module.cart_lambda.invoke_arn
+  products_lambda_name        = module.products_lambda.function_name
+  products_lambda_invoke_arn  = module.products_lambda.invoke_arn
+  inventory_lambda_name       = module.inventory_lambda.function_name
   inventory_lambda_invoke_arn = module.inventory_lambda.invoke_arn
-  payment_lambda_name        = module.payment_lambda.function_name
-  payment_lambda_invoke_arn = module.payment_lambda.invoke_arn
-  order_lambda_name          = module.order_lambda.function_name
-  order_lambda_invoke_arn    = module.order_lambda.invoke_arn
+  payment_lambda_name         = module.payment_lambda.function_name
+  payment_lambda_invoke_arn   = module.payment_lambda.invoke_arn
+  order_lambda_name           = module.order_lambda.function_name
+  order_lambda_invoke_arn     = module.order_lambda.invoke_arn
 }
 
 module "sqs" {
@@ -276,8 +276,8 @@ module "sqs" {
 module "sns" {
   source = "./modules/sns"
 
-  topic_name                = local.payment_topic_name
-  notification_lambda_arn   = module.notification_lambda.function_arn
-  notification_lambda_name  = module.notification_lambda.function_name
-  tags                      = local.common_tags
+  topic_name               = local.payment_topic_name
+  notification_lambda_arn  = module.notification_lambda.function_arn
+  notification_lambda_name = module.notification_lambda.function_name
+  tags                     = local.common_tags
 }
