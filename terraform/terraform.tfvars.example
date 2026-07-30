@@ -1,0 +1,41 @@
+# -----------------------------------------------------------------------------
+# File: terraform.tfvars.example
+# Why this file exists:
+# This file gives beginners a safe example of what their variable values should
+# look like. It is a template, not a file Terraform automatically uses unless
+# you rename it to terraform.tfvars or pass it with -var-file.
+#
+# What this file creates:
+# Nothing directly. It only supplies values to the variables defined in
+# variables.tf.
+#
+# Why these values are needed:
+# Terraform needs concrete values for the Lambda ZIP package paths and any
+# optional overrides you want to make to defaults such as tags or timeouts.
+# -----------------------------------------------------------------------------
+
+aws_region = "ap-southeast-1"
+
+project_name = "E-commerce"
+
+common_tags = {
+  Project     = "E-commerce"
+  ManagedBy   = "Terraform"
+  Environment = "Learning"
+  Owner       = "dhanushri"
+}
+
+default_lambda_runtime     = "nodejs20.x"
+default_lambda_memory_size = 256
+default_lambda_timeout     = 15
+
+api_stage_name = "v1"
+
+# These ZIP files are examples. Replace them with the real package paths you
+# build for your Lambdas before running terraform apply.
+cart_lambda_package         = "build/cart-service.zip"
+products_lambda_package     = "build/product-service.zip"
+inventory_lambda_package    = "build/inventory-service.zip"
+payment_lambda_package      = "build/payment-service.zip"
+order_lambda_package        = "build/order-service.zip"
+notification_lambda_package = "build/notification-service.zip"
