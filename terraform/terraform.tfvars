@@ -41,9 +41,9 @@ manage_sns                             = false
 
 # These ZIP files are examples. Replace them with the real package paths you
 # build for your Lambdas before running terraform apply.
-cart_lambda_package         = "build/cart-service.zip"
-products_lambda_package     = "build/product-service.zip"
-inventory_lambda_package    = "build/inventory-service.zip"
-payment_lambda_package      = "build/payment-service.zip"
-order_lambda_package        = "build/order-service.zip"
-notification_lambda_package = "build/notification-service.zip"
+cart_lambda_package         = "../build/cart-service.zip"
+products_lambda_package     = "../build/product-service.zip"
+inventory_lambda_package    = "../build/inventory-service.zip"
+payment_lambda_package      = "../build/payment-service.zip"
+order_lambda_package        = "../build/order-service.zip"
+notification_lambda_package = "../build/notification-service.zip"

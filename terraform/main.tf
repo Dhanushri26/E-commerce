@@ -75,12 +75,12 @@ data "aws_iam_role" "existing_lambda_role" {
 module "dynamodb" {
   source = "./modules/dynamodb"
 
-  cart_table_name      = local.dynamodb_table_names.cart
-  inventory_table_name = local.dynamodb_table_names.inventory
-  orders_table_name    = local.dynamodb_table_names.orders
-  payments_table_name  = local.dynamodb_table_names.payments
-  products_table_name  = local.dynamodb_table_names.products
-  users_table_name     = local.dynamodb_table_names.users
+  cart_table_name               = local.dynamodb_table_names.cart
+  inventory_table_name          = local.dynamodb_table_names.inventory
+  orders_table_name             = local.dynamodb_table_names.orders
+  payments_table_name           = local.dynamodb_table_names.payments
+  products_table_name           = local.dynamodb_table_names.products
+  users_table_name              = local.dynamodb_table_names.users
   manage_server_side_encryption = var.manage_dynamodb_server_side_encryption
   tags                          = local.common_tags
 }
@@ -146,7 +146,6 @@ module "cart_lambda" {
   tags          = local.common_tags
 
   environment_variables = {
-    AWS_REGION          = var.aws_region
     DYNAMODB_TABLE_NAME = module.dynamodb.cart_table_name
     CART_TABLE          = module.dynamodb.cart_table_name
     PRODUCT_TABLE       = module.dynamodb.products_table_name
@@ -170,7 +169,6 @@ module "products_lambda" {
   tags          = local.common_tags
 
   environment_variables = {
-    AWS_REGION          = var.aws_region
     DYNAMODB_TABLE_NAME = module.dynamodb.products_table_name
   }
 }
@@ -188,7 +186,6 @@ module "inventory_lambda" {
   tags          = local.common_tags
 
   environment_variables = {
-    AWS_REGION          = var.aws_region
     DYNAMODB_TABLE_NAME = module.dynamodb.inventory_table_name
     INVENTORY_TABLE     = module.dynamodb.inventory_table_name
     PRODUCT_TABLE       = module.dynamodb.products_table_name
@@ -208,7 +205,6 @@ module "payment_lambda" {
   tags          = local.common_tags
 
   environment_variables = {
-    AWS_REGION          = var.aws_region
     DYNAMODB_TABLE_NAME = module.dynamodb.payments_table_name
     PAYMENT_TABLE       = module.dynamodb.payments_table_name
     ORDER_TABLE         = module.dynamodb.orders_table_name
@@ -229,7 +225,6 @@ module "order_lambda" {
   tags          = local.common_tags
 
   environment_variables = {
-    AWS_REGION          = var.aws_region
     DYNAMODB_TABLE_NAME = module.dynamodb.orders_table_name
     ORDER_TABLE         = module.dynamodb.orders_table_name
     CART_TABLE          = module.dynamodb.cart_table_name
@@ -251,7 +246,6 @@ module "notification_lambda" {
   tags          = local.common_tags
 
   environment_variables = {
-    AWS_REGION     = var.aws_region
     INVOICE_BUCKET = module.s3.invoices_bucket_name
   }
 }

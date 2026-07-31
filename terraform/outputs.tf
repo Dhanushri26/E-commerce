@@ -38,9 +38,9 @@ output "lambda_arns" {
   }
 }
 
-output "api_gateway_url" {
-  description = "The invoke URL for the REST API stage."
-  value       = module.api_gateway.api_invoke_url
+output "api_gateway_id" {
+  description = "The REST API ID."
+  value       = module.api_gateway.api_id
 }
 
 output "dynamodb_table_names" {
