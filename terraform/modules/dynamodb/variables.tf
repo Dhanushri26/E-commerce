@@ -41,6 +41,12 @@ variable "users_table_name" {
   type        = string
 }
 
+variable "manage_server_side_encryption" {
+  description = "When true, Terraform manages the DynamoDB server-side encryption block."
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags applied to all DynamoDB tables."
   type        = map(string)

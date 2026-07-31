@@ -31,6 +31,14 @@ default_lambda_timeout     = 15
 
 api_stage_name = "v1"
 
+# These defaults are safest for restricted learning accounts where Terraform
+# is allowed to manage existing resources but is not allowed to update IAM,
+# create SNS/SQS, or change KMS-backed DynamoDB encryption settings.
+manage_dynamodb_server_side_encryption = false
+manage_iam_role                        = false
+manage_sqs                             = false
+manage_sns                             = false
+
 # These ZIP files are examples. Replace them with the real package paths you
 # build for your Lambdas before running terraform apply.
 cart_lambda_package         = "build/cart-service.zip"

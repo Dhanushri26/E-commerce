@@ -45,6 +45,32 @@ If you have not created Lambda ZIP files yet, that is okay during the import
 step. This project allows the Lambda package variables to stay `null` until you
 are ready to manage Lambda code deployment with Terraform.
 
+## Important Note For AWS Academy Or Other Restricted Accounts
+
+Some training accounts allow `terraform plan` but block part of `terraform apply`
+through AWS Organizations service control policies (SCPs) or limited IAM
+permissions. In this repository, the most common blocked actions are:
+
+- updating DynamoDB server-side encryption, which can require `kms:CreateGrant`
+- creating SQS queues
+- creating SNS topics
+- updating existing IAM roles
+
+To keep `terraform apply` working in those environments, this project now
+defaults to a restricted-account-safe mode:
+
+```hcl
+manage_dynamodb_server_side_encryption = false
+manage_iam_role                        = false
+manage_sqs                             = false
+manage_sns                             = false
+```
+
+With those defaults, Terraform reuses the expected IAM role, queue ARN, queue
+URL, and topic ARN values without trying to create or modify the blocked AWS
+resources. Only turn those settings to `true` if your AWS account is allowed to
+manage them.
+
 ## Project Architecture
 
 This project manages:

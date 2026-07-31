@@ -132,3 +132,27 @@ variable "notification_lambda_package" {
     error_message = "notification_lambda_package must be a ZIP file path like build/notification-service.zip, not a terraform import command."
   }
 }
+
+variable "manage_dynamodb_server_side_encryption" {
+  description = "When true, Terraform manages the DynamoDB server-side encryption block. Keep this false in restricted AWS Academy-style accounts that cannot update KMS grants."
+  type        = bool
+  default     = false
+}
+
+variable "manage_iam_role" {
+  description = "When true, Terraform manages the Lambda IAM role. Keep this false when the role already exists and your AWS permissions cannot update IAM roles."
+  type        = bool
+  default     = false
+}
+
+variable "manage_sqs" {
+  description = "When true, Terraform creates and manages the SQS queue and event source mapping. Keep this false when your AWS account is blocked from creating SQS resources."
+  type        = bool
+  default     = false
+}
+
+variable "manage_sns" {
+  description = "When true, Terraform creates and manages the SNS topic and Lambda subscription. Keep this false when your AWS account is blocked from creating SNS resources."
+  type        = bool
+  default     = false
+}

@@ -67,6 +67,11 @@ locals {
   )
 }
 
+data "aws_iam_role" "existing_lambda_role" {
+  count = var.manage_iam_role ? 0 : 1
+  name  = local.iam_role_name
+}
+
 module "dynamodb" {
   source = "./modules/dynamodb"
 
@@ -76,7 +81,8 @@ module "dynamodb" {
   payments_table_name  = local.dynamodb_table_names.payments
   products_table_name  = local.dynamodb_table_names.products
   users_table_name     = local.dynamodb_table_names.users
-  tags                 = local.common_tags
+  manage_server_side_encryption = var.manage_dynamodb_server_side_encryption
+  tags                          = local.common_tags
 }
 
 module "s3" {
@@ -88,6 +94,7 @@ module "s3" {
 }
 
 module "iam" {
+  count  = var.manage_iam_role ? 1 : 0
   source = "./modules/iam"
 
   role_name = local.iam_role_name
@@ -122,6 +129,10 @@ module "iam" {
   tags      = local.common_tags
 }
 
+locals {
+  lambda_role_arn = var.manage_iam_role ? module.iam[0].role_arn : data.aws_iam_role.existing_lambda_role[0].arn
+}
+
 module "cart_lambda" {
   source = "./modules/lambda"
 
@@ -131,7 +142,7 @@ module "cart_lambda" {
   timeout       = var.default_lambda_timeout
   memory_size   = var.default_lambda_memory_size
   filename      = var.cart_lambda_package
-  role_arn      = module.iam.role_arn
+  role_arn      = local.lambda_role_arn
   tags          = local.common_tags
 
   environment_variables = {
@@ -155,7 +166,7 @@ module "products_lambda" {
   timeout       = var.default_lambda_timeout
   memory_size   = var.default_lambda_memory_size
   filename      = var.products_lambda_package
-  role_arn      = module.iam.role_arn
+  role_arn      = local.lambda_role_arn
   tags          = local.common_tags
 
   environment_variables = {
@@ -173,7 +184,7 @@ module "inventory_lambda" {
   timeout       = var.default_lambda_timeout
   memory_size   = var.default_lambda_memory_size
   filename      = var.inventory_lambda_package
-  role_arn      = module.iam.role_arn
+  role_arn      = local.lambda_role_arn
   tags          = local.common_tags
 
   environment_variables = {
@@ -193,7 +204,7 @@ module "payment_lambda" {
   timeout       = var.default_lambda_timeout
   memory_size   = var.default_lambda_memory_size
   filename      = var.payment_lambda_package
-  role_arn      = module.iam.role_arn
+  role_arn      = local.lambda_role_arn
   tags          = local.common_tags
 
   environment_variables = {
@@ -214,7 +225,7 @@ module "order_lambda" {
   timeout       = var.default_lambda_timeout
   memory_size   = var.default_lambda_memory_size
   filename      = var.order_lambda_package
-  role_arn      = module.iam.role_arn
+  role_arn      = local.lambda_role_arn
   tags          = local.common_tags
 
   environment_variables = {
@@ -236,7 +247,7 @@ module "notification_lambda" {
   timeout       = var.default_lambda_timeout
   memory_size   = var.default_lambda_memory_size
   filename      = var.notification_lambda_package
-  role_arn      = module.iam.role_arn
+  role_arn      = local.lambda_role_arn
   tags          = local.common_tags
 
   environment_variables = {
@@ -266,6 +277,7 @@ module "api_gateway" {
 }
 
 module "sqs" {
+  count  = var.manage_sqs ? 1 : 0
   source = "./modules/sqs"
 
   queue_name           = local.order_queue_name
@@ -274,6 +286,7 @@ module "sqs" {
 }
 
 module "sns" {
+  count  = var.manage_sns ? 1 : 0
   source = "./modules/sns"
 
   topic_name               = local.payment_topic_name

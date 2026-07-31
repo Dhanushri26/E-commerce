@@ -57,12 +57,12 @@ output "dynamodb_table_names" {
 
 output "queue_url" {
   description = "The URL of the order queue."
-  value       = module.sqs.queue_url
+  value       = var.manage_sqs ? module.sqs[0].queue_url : "Not managed by Terraform. Expected queue URL: https://sqs.${var.aws_region}.amazonaws.com/${data.aws_caller_identity.current.account_id}/jewelcart-order-queue"
 }
 
 output "topic_arn" {
   description = "The ARN of the payment SNS topic."
-  value       = module.sns.topic_arn
+  value       = var.manage_sns ? module.sns[0].topic_arn : "Not managed by Terraform. Expected topic ARN: arn:aws:sns:${var.aws_region}:${data.aws_caller_identity.current.account_id}:jewelcart-payment-topic"
 }
 
 output "bucket_names" {

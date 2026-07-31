@@ -40,9 +40,12 @@ resource "aws_dynamodb_table" "cart" {
     type = "S"
   }
 
-  # Encryption at rest is a recommended default for production data.
-  server_side_encryption {
-    enabled = true
+  dynamic "server_side_encryption" {
+    for_each = var.manage_server_side_encryption ? [1] : []
+
+    content {
+      enabled = true
+    }
   }
 
   tags = var.tags
@@ -64,8 +67,12 @@ resource "aws_dynamodb_table" "inventory" {
     type = "S"
   }
 
-  server_side_encryption {
-    enabled = true
+  dynamic "server_side_encryption" {
+    for_each = var.manage_server_side_encryption ? [1] : []
+
+    content {
+      enabled = true
+    }
   }
 
   tags = var.tags
@@ -87,8 +94,12 @@ resource "aws_dynamodb_table" "orders" {
     type = "S"
   }
 
-  server_side_encryption {
-    enabled = true
+  dynamic "server_side_encryption" {
+    for_each = var.manage_server_side_encryption ? [1] : []
+
+    content {
+      enabled = true
+    }
   }
 
   tags = var.tags
@@ -110,8 +121,12 @@ resource "aws_dynamodb_table" "payments" {
     type = "S"
   }
 
-  server_side_encryption {
-    enabled = true
+  dynamic "server_side_encryption" {
+    for_each = var.manage_server_side_encryption ? [1] : []
+
+    content {
+      enabled = true
+    }
   }
 
   tags = var.tags
@@ -133,8 +148,12 @@ resource "aws_dynamodb_table" "products" {
     type = "S"
   }
 
-  server_side_encryption {
-    enabled = true
+  dynamic "server_side_encryption" {
+    for_each = var.manage_server_side_encryption ? [1] : []
+
+    content {
+      enabled = true
+    }
   }
 
   tags = var.tags
@@ -156,8 +175,12 @@ resource "aws_dynamodb_table" "users" {
     type = "S"
   }
 
-  server_side_encryption {
-    enabled = true
+  dynamic "server_side_encryption" {
+    for_each = var.manage_server_side_encryption ? [1] : []
+
+    content {
+      enabled = true
+    }
   }
 
   tags = var.tags
