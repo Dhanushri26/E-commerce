@@ -50,7 +50,7 @@ locals {
 
   order_queue_name   = "jewelcart-order-queue"
   payment_topic_name = "jewelcart-payment-topic"
-  iam_role_name      = "aws_dhanushri"
+  iam_role_name      = "aws-dhanushri"
   api_name           = "JewelCart-v1-api"
 
   # These exact identifiers help us avoid circular dependencies between the
