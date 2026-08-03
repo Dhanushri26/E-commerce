@@ -1,24 +1,24 @@
- import { Link } from 'react-router-dom'
-import { ArrowRight, Truck, ShieldCheck, RotateCcw, Headphones, Zap, TrendingUp, Star } from 'lucide-react'
-import { motion } from 'framer-motion'
-import { useEffect, useState, useMemo } from 'react'
-import { getProducts, normalizeProduct } from '../api/products'
-import { ProductCard } from '../components/ProductCard'
-import { ProductGridSkeleton } from '../components/ui/Skeleton'
-import { ErrorState } from '../components/ui/EmptyState'
-import { Button } from '../components/ui/Button'
-import { Badge } from '../components/ui/Badge'
-import { useAppContext } from '../context/AppContext'
-import { CATEGORIES, POPULAR_BRANDS } from '../constants/brand'
+import { Link } from 'react-router-dom';
+import { ArrowRight, Truck, ShieldCheck, RotateCcw, Headphones, Zap, TrendingUp, Star } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { useEffect, useState, useMemo } from 'react';
+import { getProducts, normalizeProduct } from '../api/products';
+import { ProductCard } from '../components/ProductCard';
+import { ProductGridSkeleton } from '../components/ui/Skeleton';
+import { ErrorState } from '../components/ui/EmptyState';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { useAppContext } from '../context/AppContext';
+import { CATEGORIES, POPULAR_BRANDS } from '../constants/brand';
 
 function normalizeItems(items) {
-  return items.map(normalizeProduct)
+  return items.map(normalizeProduct);
 }
 
 function ProductSection({ title, subtitle, products, badge, viewAllLink }) {
-  const { addToCart, addToWishlist, wishlist } = useAppContext()
+  const { addToCart, addToWishlist, wishlist } = useAppContext();
 
-  if (products.length === 0) return null
+  if (products.length === 0) return null;
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12 lg:px-8">
@@ -48,45 +48,31 @@ function ProductSection({ title, subtitle, products, badge, viewAllLink }) {
             product={product}
             onAddToCart={addToCart}
             onAddToWishlist={addToWishlist}
-            isWishlisted={wishlist.some(
-              (w) => w.id === product.id || w.productId === product.id
-            )}
+            isWishlisted={wishlist.some((w) => w.id === product.id || w.productId === product.id)}
           />
         ))}
       </div>
     </section>
-  )
+  );
 }
 
 export function HomePage() {
-  const [products, setProducts] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     getProducts()
       .then((data) => setProducts(normalizeItems(data.items || [])))
       .catch(() => setError('Unable to load products.'))
-      .finally(() => setLoading(false))
-  }, [])
+      .finally(() => setLoading(false));
+  }, []);
 
-  const newArrivals = useMemo(
-    () => products.filter((p) => p.badge === 'New Arrival'),
-    [products]
-  )
-  const bestSellers = useMemo(
-    () => [...products].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)),
-    [products]
-  )
-  const trending = useMemo(
-    () => [...products].sort((a, b) => (b.reviews ?? 0) - (a.reviews ?? 0)),
-    [products]
-  )
-  const deals = useMemo(
-    () => products.filter((p) => (p.discount ?? 0) > 0),
-    [products]
-  )
-  const recentlyAdded = useMemo(() => products.slice(-8).reverse(), [products])
+  const newArrivals = useMemo(() => products.filter((p) => p.badge === 'New Arrival'), [products]);
+  const bestSellers = useMemo(() => [...products].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)), [products]);
+  const trending = useMemo(() => [...products].sort((a, b) => (b.reviews ?? 0) - (a.reviews ?? 0)), [products]);
+  const deals = useMemo(() => products.filter((p) => (p.discount ?? 0) > 0), [products]);
+  const recentlyAdded = useMemo(() => products.slice(-8).reverse(), [products]);
 
   if (loading) {
     return (
@@ -96,7 +82,7 @@ export function HomePage() {
           <ProductGridSkeleton count={4} />
         </div>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -104,7 +90,7 @@ export function HomePage() {
       <div className="mx-auto max-w-7xl px-4 py-20 lg:px-8">
         <ErrorState description={error} onRetry={() => window.location.reload()} />
       </div>
-    )
+    );
   }
 
   return (
@@ -120,20 +106,18 @@ export function HomePage() {
             <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
             <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-indigo-400/20 blur-2xl" />
             <div className="relative">
-              <Badge className="bg-white/20 text-white backdrop-blur-sm">
-                Summer Sale — Up to 40% Off
-              </Badge>
+              <Badge className="bg-white/20 text-white backdrop-blur-sm">Summer Sale — Up to 40% Off</Badge>
               <h1 className="mt-6 text-4xl font-bold leading-tight lg:text-5xl">
-                Shop smarter.<br />Live better.
+                Shop smarter.
+                <br />
+                Live better.
               </h1>
               <p className="mt-4 max-w-md text-lg text-indigo-100">
                 Discover thousands of products across fashion, electronics, home, and more — all in one place.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link to="/products">
-                  <Button className="bg-white text-indigo-700 hover:bg-indigo-50">
-                    Shop Now
-                  </Button>
+                  <Button className="bg-white text-indigo-700 hover:bg-indigo-50">Shop Now</Button>
                 </Link>
                 <Link to="/offers">
                   <Button variant="outline" className="border-white/30 text-white hover:bg-white/10">
@@ -202,9 +186,7 @@ export function HomePage() {
                 className="group flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm transition hover:-translate-y-1 hover:border-indigo-200 hover:shadow-md"
               >
                 <span className="text-3xl">{cat.icon}</span>
-                <p className="mt-3 text-sm font-semibold text-slate-800 group-hover:text-indigo-600">
-                  {cat.label}
-                </p>
+                <p className="mt-3 text-sm font-semibold text-slate-800 group-hover:text-indigo-600">{cat.label}</p>
               </Link>
             </motion.div>
           ))}
@@ -220,7 +202,8 @@ export function HomePage() {
               {
                 title: 'Top Picks',
                 desc: 'Hand-picked favorites loved by shoppers',
-                image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRyQbvZLRO2VINVatXZCNzllGT34NhZrxogTSi8h2OXbg&s=10',
+                image:
+                  'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRyQbvZLRO2VINVatXZCNzllGT34NhZrxogTSi8h2OXbg&s=10',
                 link: '/collections',
               },
               {
@@ -329,12 +312,10 @@ export function HomePage() {
             <p className="mt-2 text-slate-300">Use code SAVE20 at checkout. Limited time only.</p>
           </div>
           <Link to="/offers" className="mt-6 inline-block lg:mt-0">
-            <Button className="bg-white text-slate-900 hover:bg-slate-100">
-              Shop the Sale
-            </Button>
+            <Button className="bg-white text-slate-900 hover:bg-slate-100">Shop the Sale</Button>
           </Link>
         </div>
       </section>
     </div>
-  )
+  );
 }

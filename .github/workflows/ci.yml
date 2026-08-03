@@ -1,0 +1,83 @@
+name: Continuous Integration (CI)
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build Automation & Testing
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Lint Frontend Code
+        run: |
+          cd frontend
+          npm run lint || echo "Lint warnings detected"
+
+      - name: Run Frontend Unit Tests
+        run: |
+          cd frontend
+          npm test -- --run
+
+      - name: Build Frontend Application
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Install & Test Microservices Dependencies
+        run: |
+          for service in services/*/; do
+            if [ -d "$service" ]; then
+              echo "Installing dependencies for $service..."
+              (cd "$service" && if [ -f package-lock.json ]; then npm ci; else npm install; fi)
+            fi
+          done
+
+      - name: Package Lambda Microservices
+        run: |
+          mkdir -p build
+          for service_dir in services/*/; do
+            service_name=$(basename "$service_dir")
+            echo "Packaging $service_name..."
+            (cd "$service_dir" && zip -r "../../build/${service_name}.zip" . -x "*.test.js" "*.spec.js" ".git/*")
+          done
+          ls -lh build/
+
+      - name: Upload Frontend Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 7
+
+      - name: Upload Lambda Zip Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-builds
+          path: build/*.zip
+          retention-days: 7

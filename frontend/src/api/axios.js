@@ -1,12 +1,12 @@
-import axios from "axios";
-import { fetchAuthSession } from "aws-amplify/auth";
+import axios from 'axios';
+import { fetchAuthSession } from 'aws-amplify/auth';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 const api = axios.create({
   baseURL: BASE_URL,
   headers: {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
   },
 });
 
@@ -16,7 +16,7 @@ const api = axios.create({
  */
 function decodeJwtPayload(token) {
   try {
-    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     const json = atob(base64);
     return JSON.parse(json);
   } catch {
@@ -30,10 +30,10 @@ function decodeJwtPayload(token) {
  * Falls back to "Customer".
  */
 function resolveRole(idTokenPayload) {
-  const groups = idTokenPayload["cognito:groups"] || [];
-  if (groups.includes("Admin")) return "Admin";
-  if (groups.includes("Business")) return "Business";
-  return "Customer";
+  const groups = idTokenPayload['cognito:groups'] || [];
+  if (groups.includes('Admin')) return 'Admin';
+  if (groups.includes('Business')) return 'Business';
+  return 'Customer';
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -59,26 +59,26 @@ api.interceptors.request.use(
         const payload = decodeJwtPayload(idTokenStr);
 
         // x-user-id: Cognito sub (UUID uniquely identifying the user)
-        const userId = payload.sub || "";
-        if (userId) config.headers["x-user-id"] = userId;
+        const userId = payload.sub || '';
+        if (userId) config.headers['x-user-id'] = userId;
 
         // x-user-role: derived from Cognito groups
         const role = resolveRole(payload);
-        config.headers["x-user-role"] = role;
+        config.headers['x-user-role'] = role;
 
         // x-user-email: email claim
-        const email = payload.email || "";
-        if (email) config.headers["x-user-email"] = email;
+        const email = payload.email || '';
+        if (email) config.headers['x-user-email'] = email;
 
         // x-business-id: if user belongs to a Business group, use sub as
         // businessId placeholder until custom attributes are added.
-        if (role === "Business") {
-          config.headers["x-business-id"] = payload["custom:businessId"] || userId;
+        if (role === 'Business') {
+          config.headers['x-business-id'] = payload['custom:businessId'] || userId;
         }
       }
     } catch (err) {
       // Unauthenticated requests proceed without headers
-      console.warn("[api] Could not attach auth headers:", err?.message);
+      console.warn('[api] Could not attach auth headers:', err?.message);
     }
 
     return config;

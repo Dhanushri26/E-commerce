@@ -1,5 +1,5 @@
-import { X } from 'lucide-react'
-import { cn } from '../../lib/utils'
+import { X } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 export function Input({
   label,
@@ -14,9 +14,7 @@ export function Input({
 }) {
   return (
     <div className={cn('w-full', containerClassName)}>
-      {label && (
-        <label className="mb-1.5 block text-sm font-medium text-slate-700">{label}</label>
-      )}
+      {label && <label className="mb-1.5 block text-sm font-medium text-slate-700">{label}</label>}
       <div className="group relative">
         {Icon && (
           <Icon
@@ -50,5 +48,5 @@ export function Input({
       </div>
       {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
     </div>
-  )
+  );
 }

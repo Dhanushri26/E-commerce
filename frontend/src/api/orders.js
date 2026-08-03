@@ -1,4 +1,4 @@
-import api from "./axios";
+import api from './axios';
 
 // ──────────────────────────────────────────────────────────────
 // ORDER SERVICE  →  /orders
@@ -9,7 +9,7 @@ import api from "./axios";
  * Response: { orders: Order[] }
  */
 export const getOrders = async () => {
-  const response = await api.get("/orders");
+  const response = await api.get('/orders');
   return response.data; // { orders: [...] }
 };
 
@@ -29,10 +29,10 @@ export const getOrderById = async (orderId) => {
  * Response: { order: Order }
  */
 export const createOrder = async (data = {}) => {
-  const response = await api.post("/orders", data, {
+  const response = await api.post('/orders', data, {
     headers: {
       // Idempotency key to prevent duplicate order creation on retry
-      "Idempotency-Key": `order-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      'Idempotency-Key': `order-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     },
   });
   return response.data; // { order: { orderId, totalAmount, orderStatus, ... } }

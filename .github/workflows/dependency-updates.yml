@@ -1,0 +1,55 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    - cron: '0 4 * * 1' # Runs every Monday at 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-dependencies:
+    name: Automated Dependency Audit & Update Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Audit Frontend Dependencies
+        run: |
+          echo "=== Frontend Dependency Audit ==="
+          cd frontend
+          npm audit || echo "Audit completed with warnings"
+          npm outdated || echo "Outdated packages reported"
+
+      - name: Audit Microservices Dependencies
+        run: |
+          echo "=== Backend Microservices Dependency Audit ==="
+          for service in services/*/; do
+            if [ -d "$service" ]; then
+              echo "Auditing $service..."
+              (cd "$service" && npm audit || echo "Audit completed with warnings")
+              (cd "$service" && npm outdated || echo "Outdated packages reported")
+            fi
+          done
+
+      - name: Generate Dependency Summary Report
+        run: |
+          {
+            echo "# 📦 Weekly Dependency Update Report"
+            echo ""
+            echo "## Run Information"
+            echo "- Date: $(date -u)"
+            echo "- Branch: $GITHUB_REF_NAME"
+            echo ""
+            echo "## Status"
+            echo "Automated npm audit and outdated package checks completed for frontend and backend microservices."
+          } >> $GITHUB_STEP_SUMMARY

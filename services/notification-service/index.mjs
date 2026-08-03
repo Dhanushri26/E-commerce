@@ -1,18 +1,17 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const s3 = new S3Client({
-    region: process.env.AWS_REGION
+  region: process.env.AWS_REGION,
 });
 
 export const handler = async (event) => {
+  console.log('SNS Event Received');
 
-    console.log("SNS Event Received");
+  const snsMessage = JSON.parse(event.Records[0].Sns.Message);
 
-    const snsMessage = JSON.parse(event.Records[0].Sns.Message);
+  console.log(snsMessage);
 
-    console.log(snsMessage);
-
-    const invoice = `
+  const invoice = `
 =========================
 JEWELCART INVOICE
 =========================
@@ -30,24 +29,21 @@ Status : PAID
 Generated : ${new Date().toISOString()}
 `;
 
-    await s3.send(
-        new PutObjectCommand({
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: process.env.INVOICE_BUCKET,
 
-            Bucket: process.env.INVOICE_BUCKET,
+      Key: `${snsMessage.orderId}.txt`,
 
-            Key: `${snsMessage.orderId}.txt`,
+      Body: invoice,
 
-            Body: invoice,
+      ContentType: 'text/plain',
+    })
+  );
 
-            ContentType: "text/plain"
+  console.log('Invoice uploaded to S3');
 
-        })
-    );
-
-    console.log("Invoice uploaded to S3");
-
-    return {
-        statusCode: 200
-    };
-
+  return {
+    statusCode: 200,
+  };
 };

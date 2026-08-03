@@ -1,4 +1,4 @@
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/utils';
 
 export function Card({ children, className, hover = false, ...props }) {
   return (
@@ -12,17 +12,17 @@ export function Card({ children, className, hover = false, ...props }) {
     >
       {children}
     </div>
-  )
+  );
 }
 
 export function CardHeader({ children, className }) {
-  return <div className={cn('p-6 pb-0', className)}>{children}</div>
+  return <div className={cn('p-6 pb-0', className)}>{children}</div>;
 }
 
 export function CardContent({ children, className }) {
-  return <div className={cn('p-6', className)}>{children}</div>
+  return <div className={cn('p-6', className)}>{children}</div>;
 }
 
 export function CardFooter({ children, className }) {
-  return <div className={cn('border-t border-slate-100 p-6 pt-4', className)}>{children}</div>
+  return <div className={cn('border-t border-slate-100 p-6 pt-4', className)}>{children}</div>;
 }

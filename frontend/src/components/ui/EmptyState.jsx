@@ -1,15 +1,7 @@
-import { cn } from '../../lib/utils'
-import { Button } from './Button'
+import { cn } from '../../lib/utils';
+import { Button } from './Button';
 
-export function EmptyState({
-  icon: Icon,
-  title,
-  description,
-  actionLabel,
-  onAction,
-  actionTo,
-  className,
-}) {
+export function EmptyState({ icon: Icon, title, description, actionLabel, onAction, actionTo, className }) {
   return (
     <div
       className={cn(
@@ -23,16 +15,14 @@ export function EmptyState({
         </div>
       )}
       <h3 className="text-lg font-semibold text-slate-800">{title}</h3>
-      {description && (
-        <p className="mt-2 max-w-sm text-sm text-slate-500">{description}</p>
-      )}
+      {description && <p className="mt-2 max-w-sm text-sm text-slate-500">{description}</p>}
       {actionLabel && onAction && (
         <Button className="mt-6" onClick={onAction}>
           {actionLabel}
         </Button>
       )}
     </div>
-  )
+  );
 }
 
 export function ErrorState({ title = 'Something went wrong', description, onRetry, className }) {
@@ -51,5 +41,5 @@ export function ErrorState({ title = 'Something went wrong', description, onRetr
         </Button>
       )}
     </div>
-  )
+  );
 }

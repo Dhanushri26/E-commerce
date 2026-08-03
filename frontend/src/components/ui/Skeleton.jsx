@@ -1,12 +1,7 @@
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/utils';
 
 export function Skeleton({ className, ...props }) {
-  return (
-    <div
-      className={cn('skeleton-shimmer rounded-lg bg-slate-200', className)}
-      {...props}
-    />
-  )
+  return <div className={cn('skeleton-shimmer rounded-lg bg-slate-200', className)} {...props} />;
 }
 
 export function ProductCardSkeleton() {
@@ -23,7 +18,7 @@ export function ProductCardSkeleton() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 export function ProductGridSkeleton({ count = 6 }) {
@@ -33,5 +28,5 @@ export function ProductGridSkeleton({ count = 6 }) {
         <ProductCardSkeleton key={i} />
       ))}
     </div>
-  )
+  );
 }

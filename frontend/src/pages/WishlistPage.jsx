@@ -1,9 +1,9 @@
-import { Link } from 'react-router-dom'
-import { Heart, ShoppingCart, Trash2, ArrowRight } from 'lucide-react'
-import { useAppContext } from '../context/AppContext'
+import { Link } from 'react-router-dom';
+import { Heart, ShoppingCart, Trash2, ArrowRight } from 'lucide-react';
+import { useAppContext } from '../context/AppContext';
 
 export function WishlistPage() {
-  const { wishlist, addToCart, removeFromWishlist } = useAppContext()
+  const { wishlist, addToCart, removeFromWishlist } = useAppContext();
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 lg:px-8 page-enter">
@@ -43,9 +43,9 @@ export function WishlistPage() {
       {wishlist.length > 0 && (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {wishlist.map((product) => {
-            const id = product.id ?? product.productId
-            const name = product.name ?? product.title ?? 'Product'
-            const price = product.price ?? product.msrp ?? 0
+            const id = product.id ?? product.productId;
+            const name = product.name ?? product.title ?? 'Product';
+            const price = product.price ?? product.msrp ?? 0;
 
             return (
               <div
@@ -80,9 +80,7 @@ export function WishlistPage() {
                 {/* Info */}
                 <div className="flex flex-1 flex-col p-4">
                   {product.category && (
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                      {product.category}
-                    </p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{product.category}</p>
                   )}
                   <Link to={`/products/${id}`}>
                     <h3 className="mt-1 line-clamp-2 text-sm font-semibold text-slate-900 hover:text-indigo-600 transition">
@@ -99,9 +97,7 @@ export function WishlistPage() {
                         ₹{Number(price).toLocaleString('en-IN')}
                       </span>
                       {product.discount > 0 && (
-                        <span className="text-xs font-semibold text-emerald-600">
-                          {product.discount}% off
-                        </span>
+                        <span className="text-xs font-semibold text-emerald-600">{product.discount}% off</span>
                       )}
                     </div>
                     <button
@@ -114,10 +110,10 @@ export function WishlistPage() {
                   </div>
                 </div>
               </div>
-            )
+            );
           })}
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -1,27 +1,21 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Heart, Eye, ShoppingCart } from 'lucide-react'
-import { motion } from 'framer-motion'
-import { Badge } from './ui/Badge'
-import { Button } from './ui/Button'
-import { Rating } from './ui/Rating'
-import { Price } from './ui/Price'
-import { cn } from '../lib/utils'
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Heart, Eye, ShoppingCart } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { Rating } from './ui/Rating';
+import { Price } from './ui/Price';
+import { cn } from '../lib/utils';
 
-export function ProductCard({
-  product,
-  onAddToCart,
-  onAddToWishlist,
-  isWishlisted = false,
-  className,
-}) {
-  const [imgLoaded, setImgLoaded] = useState(false)
-  const id = product.id ?? product.productId
-  const name = product.name ?? product.title ?? 'Product'
-  const price = product.price ?? product.msrp ?? 0
-  const image = product.image ?? product.imageUrl
-  const inStock = (product.stock ?? 10) > 0
-  const discount = product.discount ?? 0
+export function ProductCard({ product, onAddToCart, onAddToWishlist, isWishlisted = false, className }) {
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const id = product.id ?? product.productId;
+  const name = product.name ?? product.title ?? 'Product';
+  const price = product.price ?? product.msrp ?? 0;
+  const image = product.image ?? product.imageUrl;
+  const inStock = (product.stock ?? 10) > 0;
+  const discount = product.discount ?? 0;
 
   return (
     <motion.div
@@ -34,9 +28,7 @@ export function ProductCard({
     >
       <Link to={`/products/${id}`} className="block">
         <div className="relative aspect-[4/5] overflow-hidden bg-slate-100">
-          {!imgLoaded && (
-            <div className="absolute inset-0 skeleton-shimmer" />
-          )}
+          {!imgLoaded && <div className="absolute inset-0 skeleton-shimmer" />}
           <img
             src={image}
             alt={name}
@@ -63,8 +55,8 @@ export function ProductCard({
             <button
               type="button"
               onClick={(e) => {
-                e.preventDefault()
-                onAddToWishlist?.(product)
+                e.preventDefault();
+                onAddToWishlist?.(product);
               }}
               className={cn(
                 'rounded-full bg-white/95 p-2.5 shadow-md backdrop-blur-sm transition-colors',
@@ -96,9 +88,7 @@ export function ProductCard({
 
       <div className="p-4">
         {product.category && (
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            {product.category}
-          </p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{product.category}</p>
         )}
         <Link to={`/products/${id}`}>
           <h3 className="mt-1 line-clamp-2 text-sm font-semibold text-slate-900 transition-colors group-hover:text-indigo-600">
@@ -112,24 +102,16 @@ export function ProductCard({
 
         <div className="mt-3 flex items-end justify-between gap-2">
           <Price price={price} discount={discount} size="sm" />
-          <Badge
-            variant={inStock ? 'success' : 'error'}
-            className="shrink-0 text-[10px]"
-          >
+          <Badge variant={inStock ? 'success' : 'error'} className="shrink-0 text-[10px]">
             {inStock ? 'In Stock' : 'Sold Out'}
           </Badge>
         </div>
 
-        <Button
-          size="sm"
-          className="mt-4 w-full"
-          disabled={!inStock}
-          onClick={() => onAddToCart?.(product)}
-        >
+        <Button size="sm" className="mt-4 w-full" disabled={!inStock} onClick={() => onAddToCart?.(product)}>
           <ShoppingCart size={14} />
           Add to Cart
         </Button>
       </div>
     </motion.div>
-  )
+  );
 }

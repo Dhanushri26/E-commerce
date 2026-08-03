@@ -1,25 +1,51 @@
-import { useEffect, useState, useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useState, useMemo } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Heart, Loader2, Share2, Star, ShoppingCart,
-  Truck, ShieldCheck, RotateCcw, Package, Zap, ChevronRight
-} from "lucide-react";
-import { getProductById, normalizeProduct } from "../api/products";
-import { useAppContext } from "../context/AppContext";
-import { Badge } from "../components/ui/Badge";
-import { cn } from "../lib/utils";
+  ArrowLeft,
+  Heart,
+  Loader2,
+  Share2,
+  Star,
+  ShoppingCart,
+  Truck,
+  ShieldCheck,
+  RotateCcw,
+  Package,
+  Zap,
+  ChevronRight,
+} from 'lucide-react';
+import { getProductById, normalizeProduct } from '../api/products';
+import { useAppContext } from '../context/AppContext';
+import { Badge } from '../components/ui/Badge';
+import { cn } from '../lib/utils';
 
 // Derive spec entries from product data — generic, no jewellery hardcoding
 function buildSpecs(product) {
-  const specs = []
-  const skip = new Set(['id', 'productId', 'name', 'title', 'description', 'imageUrl', 'image', 'price', 'msrp', 'discount', 'stock', 'badge', 'rating', 'reviews', 'category'])
+  const specs = [];
+  const skip = new Set([
+    'id',
+    'productId',
+    'name',
+    'title',
+    'description',
+    'imageUrl',
+    'image',
+    'price',
+    'msrp',
+    'discount',
+    'stock',
+    'badge',
+    'rating',
+    'reviews',
+    'category',
+  ]);
   Object.entries(product).forEach(([key, val]) => {
-    if (skip.has(key) || !val || typeof val === 'object') return
+    if (skip.has(key) || !val || typeof val === 'object') return;
     // Format key: camelCase → Title Case
-    const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())
-    specs.push({ label, value: String(val) })
-  })
-  return specs
+    const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase());
+    specs.push({ label, value: String(val) });
+  });
+  return specs;
 }
 
 export function ProductDetailPage() {
@@ -28,30 +54,27 @@ export function ProductDetailPage() {
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [qty, setQty] = useState(1);
-  const [activeTab, setActiveTab] = useState("description"); // description | specs | reviews
+  const [activeTab, setActiveTab] = useState('description'); // description | specs | reviews
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    setError("");
+    setError('');
     getProductById(id)
       .then((data) => {
         const raw = data?.product ?? data?.item ?? data;
         setProduct(normalizeProduct(raw));
       })
       .catch((err) => {
-        console.error("[ProductDetailPage] fetch error:", err);
-        setError("Product not found or unavailable.");
+        console.error('[ProductDetailPage] fetch error:', err);
+        setError('Product not found or unavailable.');
       })
       .finally(() => setLoading(false));
   }, [id]);
 
-  const isWishlisted = useMemo(
-    () => wishlist.some((w) => w.id === id || w.productId === id),
-    [wishlist, id]
-  );
+  const isWishlisted = useMemo(() => wishlist.some((w) => w.id === id || w.productId === id), [wishlist, id]);
 
   const specs = useMemo(() => (product ? buildSpecs(product) : []), [product]);
 
@@ -78,7 +101,7 @@ export function ProductDetailPage() {
     return (
       <div className="mx-auto max-w-7xl px-4 py-20 text-center lg:px-8">
         <Package className="mx-auto text-slate-300" size={48} />
-        <p className="mt-4 text-lg font-semibold text-slate-700">{error || "Product not found."}</p>
+        <p className="mt-4 text-lg font-semibold text-slate-700">{error || 'Product not found.'}</p>
         <p className="mt-2 text-slate-400">The item you're looking for may have been removed or is unavailable.</p>
         <Link
           to="/products"
@@ -97,9 +120,13 @@ export function ProductDetailPage() {
     <div className="mx-auto max-w-7xl px-4 py-8 lg:px-8 page-enter">
       {/* Breadcrumb */}
       <nav className="mb-6 flex items-center gap-2 text-xs text-slate-400">
-        <Link to="/" className="hover:text-indigo-600 transition">Home</Link>
+        <Link to="/" className="hover:text-indigo-600 transition">
+          Home
+        </Link>
         <ChevronRight size={12} />
-        <Link to="/products" className="hover:text-indigo-600 transition">Products</Link>
+        <Link to="/products" className="hover:text-indigo-600 transition">
+          Products
+        </Link>
         {product.category && (
           <>
             <ChevronRight size={12} />
@@ -136,19 +163,15 @@ export function ProductDetailPage() {
         {/* ── Right: Details ───────────────────────────── */}
         <div>
           {product.category && (
-            <p className="text-xs font-semibold uppercase tracking-widest text-indigo-600">
-              {product.category}
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-indigo-600">{product.category}</p>
           )}
-          <h1 className="mt-2 text-3xl font-bold leading-tight text-slate-900 lg:text-4xl">
-            {product.name}
-          </h1>
+          <h1 className="mt-2 text-3xl font-bold leading-tight text-slate-900 lg:text-4xl">{product.name}</h1>
 
           {/* Rating */}
           {(product.rating || product.reviews) && (
             <div className="mt-3 flex items-center gap-3">
               <div className="flex items-center gap-1">
-                {[1,2,3,4,5].map((s) => (
+                {[1, 2, 3, 4, 5].map((s) => (
                   <Star
                     key={s}
                     size={16}
@@ -158,21 +181,15 @@ export function ProductDetailPage() {
                 ))}
               </div>
               <span className="text-sm font-semibold text-slate-700">{product.rating ?? 'N/A'}</span>
-              {product.reviews && (
-                <span className="text-sm text-slate-400">({product.reviews} reviews)</span>
-              )}
+              {product.reviews && <span className="text-sm text-slate-400">({product.reviews} reviews)</span>}
             </div>
           )}
 
           {/* Price */}
           <div className="mt-5 flex items-baseline gap-3">
-            <span className="text-3xl font-bold text-slate-900">
-              ₹{Number(product.price).toLocaleString('en-IN')}
-            </span>
+            <span className="text-3xl font-bold text-slate-900">₹{Number(product.price).toLocaleString('en-IN')}</span>
             {oldPrice && (
-              <span className="text-lg text-slate-400 line-through">
-                ₹{Number(oldPrice).toLocaleString('en-IN')}
-              </span>
+              <span className="text-lg text-slate-400 line-through">₹{Number(oldPrice).toLocaleString('en-IN')}</span>
             )}
             {product.discount > 0 && (
               <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">
@@ -183,10 +200,7 @@ export function ProductDetailPage() {
 
           {/* Stock indicator */}
           <div className="mt-4 flex items-center gap-2">
-            <span className={cn(
-              'h-2 w-2 rounded-full',
-              inStock ? 'bg-emerald-500' : 'bg-red-500'
-            )} />
+            <span className={cn('h-2 w-2 rounded-full', inStock ? 'bg-emerald-500' : 'bg-red-500')} />
             <span className={cn('text-sm font-medium', inStock ? 'text-emerald-700' : 'text-red-600')}>
               {inStock ? `In Stock${product.stock ? ` (${product.stock} left)` : ''}` : 'Out of Stock'}
             </span>
@@ -213,21 +227,25 @@ export function ProductDetailPage() {
                   onClick={() => setQty((q) => Math.max(1, q - 1))}
                   className="px-4 py-2.5 text-slate-600 hover:bg-slate-50 transition"
                   id={`qty-dec-${product.id}`}
-                >−</button>
+                >
+                  −
+                </button>
                 <span className="min-w-[2.5rem] text-center text-sm font-semibold text-slate-900">{qty}</span>
                 <button
                   onClick={() => setQty((q) => q + 1)}
                   className="px-4 py-2.5 text-slate-600 hover:bg-slate-50 transition"
                   id={`qty-inc-${product.id}`}
-                >+</button>
+                >
+                  +
+                </button>
               </div>
             </div>
 
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => {
-                  const p = { ...product, quantity: qty }
-                  addToCart(p)
+                  const p = { ...product, quantity: qty };
+                  addToCart(p);
                 }}
                 disabled={!inStock}
                 id={`add-to-cart-${product.id}`}
@@ -301,20 +319,21 @@ export function ProductDetailPage() {
             </p>
           )}
 
-          {activeTab === 'specs' && (
-            specs.length > 0 ? (
+          {activeTab === 'specs' &&
+            (specs.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 {specs.map(({ label, value }) => (
                   <div key={label} className="flex items-start gap-3 rounded-xl bg-slate-50 px-4 py-3">
-                    <span className="min-w-[100px] text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+                    <span className="min-w-[100px] text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      {label}
+                    </span>
                     <span className="text-sm text-slate-700">{value}</span>
                   </div>
                 ))}
               </div>
             ) : (
               <p className="text-sm text-slate-400">No specifications available.</p>
-            )
-          )}
+            ))}
 
           {activeTab === 'reviews' && (
             <div className="space-y-4">
@@ -322,7 +341,7 @@ export function ProductDetailPage() {
                 <div className="text-5xl font-bold text-slate-900">{product.rating ?? '—'}</div>
                 <div>
                   <div className="flex gap-1">
-                    {[1,2,3,4,5].map((s) => (
+                    {[1, 2, 3, 4, 5].map((s) => (
                       <Star
                         key={s}
                         size={20}

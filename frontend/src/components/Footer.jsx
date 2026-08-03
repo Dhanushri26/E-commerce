@@ -1,8 +1,8 @@
-import { Link } from 'react-router-dom'
-import { Facebook, Instagram, Twitter, Youtube } from 'lucide-react'
-import { BRAND, CATEGORIES } from '../constants/brand'
-import { Input } from './ui/Input'
-import { Button } from './ui/Button'
+import { Link } from 'react-router-dom';
+import { Facebook, Instagram, Twitter, Youtube } from 'lucide-react';
+import { BRAND, CATEGORIES } from '../constants/brand';
+import { Input } from './ui/Input';
+import { Button } from './ui/Button';
 
 export function Footer() {
   return (
@@ -16,10 +16,7 @@ export function Footer() {
               Get exclusive deals, new arrivals, and shopping tips delivered to your inbox.
             </p>
           </div>
-          <form
-            className="flex w-full max-w-md gap-2"
-            onSubmit={(e) => e.preventDefault()}
-          >
+          <form className="flex w-full max-w-md gap-2" onSubmit={(e) => e.preventDefault()}>
             <Input
               type="email"
               placeholder="Enter your email"
@@ -40,8 +37,7 @@ export function Footer() {
             <span className="text-indigo-400">Shop</span>Sphere
           </p>
           <p className="mt-4 text-sm leading-relaxed text-slate-400">
-            {BRAND.tagline} Discover quality products across every category, with fast delivery
-            and hassle-free returns.
+            {BRAND.tagline} Discover quality products across every category, with fast delivery and hassle-free returns.
           </p>
           <div className="mt-6 flex gap-3">
             {[Facebook, Instagram, Twitter, Youtube].map((Icon, i) => (
@@ -110,5 +106,5 @@ export function Footer() {
         © {new Date().getFullYear()} {BRAND.name}. All rights reserved.
       </div>
     </footer>
-  )
+  );
 }

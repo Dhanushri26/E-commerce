@@ -1,20 +1,7 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { fetchAuthSession } from "aws-amplify/auth";
-import {
-  addCartItem,
-  getCartItems,
-  updateCartItem,
-  deleteCartItem,
-  clearCart as apiClearCart,
-} from "../api/cart";
-import { getOrders, createOrder as apiCreateOrder } from "../api/orders";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { fetchAuthSession } from 'aws-amplify/auth';
+import { addCartItem, getCartItems, updateCartItem, deleteCartItem, clearCart as apiClearCart } from '../api/cart';
+import { getOrders, createOrder as apiCreateOrder } from '../api/orders';
 
 const AppContext = createContext(undefined);
 
@@ -24,7 +11,7 @@ const AppContext = createContext(undefined);
 
 function decodeJwtPayload(token) {
   try {
-    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     return JSON.parse(atob(base64));
   } catch {
     return {};
@@ -32,10 +19,10 @@ function decodeJwtPayload(token) {
 }
 
 function resolveRole(payload) {
-  const groups = payload["cognito:groups"] || [];
-  if (groups.includes("Admin")) return "Admin";
-  if (groups.includes("Business")) return "Business";
-  return "Customer";
+  const groups = payload['cognito:groups'] || [];
+  if (groups.includes('Admin')) return 'Admin';
+  if (groups.includes('Business')) return 'Business';
+  return 'Customer';
 }
 
 // ────────────────────────────────────────────────
@@ -46,7 +33,7 @@ export function AppProvider({ children }) {
   // ── Auth / User ──
   const [user, setUser] = useState(null);
   // user = { userId, email, role, name }
-const [authLoading, setAuthLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
   // ── Cart ──
   const [cart, setCart] = useState([]);
   const [cartLoading, setCartLoading] = useState(false);
@@ -72,9 +59,9 @@ const [authLoading, setAuthLoading] = useState(true);
         if (!idTokenStr) return;
         const payload = decodeJwtPayload(idTokenStr);
         setUser({
-          userId: payload.sub || "",
-          email: payload.email || "",
-          name: payload.name || payload.email?.split("@")[0] || "Guest",
+          userId: payload.sub || '',
+          email: payload.email || '',
+          name: payload.name || payload.email?.split('@')[0] || 'Guest',
           role: resolveRole(payload),
         });
       } catch {
@@ -98,7 +85,7 @@ const [authLoading, setAuthLoading] = useState(true);
       const items = response.data?.items || [];
       setCart(items);
     } catch (err) {
-      console.error("[AppContext] loadCart error:", err);
+      console.error('[AppContext] loadCart error:', err);
     } finally {
       setCartLoading(false);
     }
@@ -109,50 +96,50 @@ const [authLoading, setAuthLoading] = useState(true);
   }, [loadCart]);
 
   /** Add product to cart then reload from backend. */
-  const addToCart = useCallback(async (product) => {
-    try {
-      // Lambda accepts productId (string uuid from product-service)
-      const productId = product.productId ?? product.id;
-      await addCartItem({ productId, quantity: 1 });
-      await loadCart();
-      showToast("Added to cart!", "success");
-    } catch (err) {
-      console.error("[AppContext] addToCart error:", err);
-      showToast(
-        err.response?.data?.message || "Could not add item to cart.",
-        "error"
-      );
-    }
-  }, [loadCart]);
+  const addToCart = useCallback(
+    async (product) => {
+      try {
+        // Lambda accepts productId (string uuid from product-service)
+        const productId = product.productId ?? product.id;
+        await addCartItem({ productId, quantity: 1 });
+        await loadCart();
+        showToast('Added to cart!', 'success');
+      } catch (err) {
+        console.error('[AppContext] addToCart error:', err);
+        showToast(err.response?.data?.message || 'Could not add item to cart.', 'error');
+      }
+    },
+    [loadCart]
+  );
 
   /** Update cart item quantity on backend then reload. */
-  const updateQuantity = useCallback(async (productId, quantity) => {
-    if (quantity <= 0) return removeFromCart(productId);
-    try {
-      await updateCartItem(productId, { quantity });
-      await loadCart();
-    } catch (err) {
-      console.error("[AppContext] updateQuantity error:", err);
-      showToast(
-        err.response?.data?.message || "Could not update quantity.",
-        "error"
-      );
-    }
-  }, [loadCart]);
+  const updateQuantity = useCallback(
+    async (productId, quantity) => {
+      if (quantity <= 0) return removeFromCart(productId);
+      try {
+        await updateCartItem(productId, { quantity });
+        await loadCart();
+      } catch (err) {
+        console.error('[AppContext] updateQuantity error:', err);
+        showToast(err.response?.data?.message || 'Could not update quantity.', 'error');
+      }
+    },
+    [loadCart]
+  );
 
   /** Remove a cart item from backend then reload. */
-  const removeFromCart = useCallback(async (productId) => {
-    try {
-      await deleteCartItem(productId);
-      await loadCart();
-    } catch (err) {
-      console.error("[AppContext] removeFromCart error:", err);
-      showToast(
-        err.response?.data?.message || "Could not remove item.",
-        "error"
-      );
-    }
-  }, [loadCart]);
+  const removeFromCart = useCallback(
+    async (productId) => {
+      try {
+        await deleteCartItem(productId);
+        await loadCart();
+      } catch (err) {
+        console.error('[AppContext] removeFromCart error:', err);
+        showToast(err.response?.data?.message || 'Could not remove item.', 'error');
+      }
+    },
+    [loadCart]
+  );
 
   /** Clear all cart items. */
   const clearCartItems = useCallback(async () => {
@@ -160,7 +147,7 @@ const [authLoading, setAuthLoading] = useState(true);
       await apiClearCart();
       setCart([]);
     } catch (err) {
-      console.error("[AppContext] clearCart error:", err);
+      console.error('[AppContext] clearCart error:', err);
     }
   }, []);
 
@@ -174,19 +161,22 @@ const [authLoading, setAuthLoading] = useState(true);
       const data = await getOrders();
       setOrders(data.orders || []);
     } catch (err) {
-      console.error("[AppContext] loadOrders error:", err);
+      console.error('[AppContext] loadOrders error:', err);
     } finally {
       setOrdersLoading(false);
     }
   }, []);
 
-  const createOrder = useCallback(async (notes = "") => {
-    const data = await apiCreateOrder({ notes });
-    // Clear cart from state after successful order
-    setCart([]);
-    await loadOrders();
-    return data; // { order: { orderId, ... } }
-  }, [loadOrders]);
+  const createOrder = useCallback(
+    async (notes = '') => {
+      const data = await apiCreateOrder({ notes });
+      // Clear cart from state after successful order
+      setCart([]);
+      await loadOrders();
+      return data; // { order: { orderId, ... } }
+    },
+    [loadOrders]
+  );
 
   // ──────────────────────────────────────────────
   // Wishlist (local – no backend yet)
@@ -194,22 +184,18 @@ const [authLoading, setAuthLoading] = useState(true);
 
   const addToWishlist = useCallback((product) => {
     setWishlist((prev) =>
-      prev.some((item) => item.id === product.id || item.productId === product.productId)
-        ? prev
-        : [...prev, product]
+      prev.some((item) => item.id === product.id || item.productId === product.productId) ? prev : [...prev, product]
     );
   }, []);
 
   const removeFromWishlist = useCallback((id) => {
-    setWishlist((prev) =>
-      prev.filter((item) => item.id !== id && item.productId !== id)
-    );
+    setWishlist((prev) => prev.filter((item) => item.id !== id && item.productId !== id));
   }, []);
 
   // ──────────────────────────────────────────────
   // Toast helper
   // ──────────────────────────────────────────────
-  const showToast = (message, type = "info") => {
+  const showToast = (message, type = 'info') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
@@ -268,6 +254,6 @@ const [authLoading, setAuthLoading] = useState(true);
 
 export function useAppContext() {
   const context = useContext(AppContext);
-  if (!context) throw new Error("useAppContext must be used within AppProvider");
+  if (!context) throw new Error('useAppContext must be used within AppProvider');
   return context;
 }

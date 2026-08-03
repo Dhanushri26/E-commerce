@@ -1,4 +1,4 @@
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/utils';
 
 const variants = {
   default: 'bg-slate-100 text-slate-700',
@@ -8,7 +8,7 @@ const variants = {
   error: 'bg-red-100 text-red-700',
   discount: 'bg-red-500 text-white',
   outline: 'border border-slate-200 bg-white text-slate-600',
-}
+};
 
 export function Badge({ children, variant = 'default', className }) {
   return (
@@ -21,5 +21,5 @@ export function Badge({ children, variant = 'default', className }) {
     >
       {children}
     </span>
-  )
+  );
 }

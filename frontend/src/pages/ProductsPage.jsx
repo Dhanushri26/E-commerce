@@ -1,21 +1,25 @@
-import { useMemo, useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { SlidersHorizontal, Search, X, ChevronDown, LayoutGrid, List } from 'lucide-react'
-import { useAppContext } from '../context/AppContext'
-import { getProducts, normalizeProduct } from '../api/products'
-import { ProductCard } from '../components/ProductCard'
-import { ProductGridSkeleton } from '../components/ui/Skeleton'
-import { EmptyState } from '../components/ui/EmptyState'
+import { useMemo, useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { SlidersHorizontal, Search, X, ChevronDown, LayoutGrid, List } from 'lucide-react';
+import { useAppContext } from '../context/AppContext';
+import { getProducts, normalizeProduct } from '../api/products';
+import { ProductCard } from '../components/ProductCard';
+import { ProductGridSkeleton } from '../components/ui/Skeleton';
+import { EmptyState } from '../components/ui/EmptyState';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 // Map route → display filter label
 function getRouteCategory(pathname) {
   switch (pathname) {
-    case '/new-arrivals': return 'New Arrivals'
-    case '/collections': return 'Collections'
-    case '/gemstones': return 'Sale'
-    default: return 'All'
+    case '/new-arrivals':
+      return 'New Arrivals';
+    case '/collections':
+      return 'Collections';
+    case '/gemstones':
+      return 'Sale';
+    default:
+      return 'All';
   }
 }
 
@@ -25,95 +29,100 @@ const SORT_OPTIONS = [
   { value: 'price-high', label: 'Price: High to Low' },
   { value: 'rating', label: 'Top Rated' },
   { value: 'newest', label: 'Newest First' },
-]
+];
 
-const RATING_OPTIONS = [4, 3, 2, 1]
+const RATING_OPTIONS = [4, 3, 2, 1];
 
 // ── Component ─────────────────────────────────────────────────────────────
 
 export function ProductsPage() {
-  const location = useLocation()
-  const { addToCart, addToWishlist, wishlist } = useAppContext()
+  const location = useLocation();
+  const { addToCart, addToWishlist, wishlist } = useAppContext();
 
-  const [products, setProducts] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   // Filter state
-  const [query, setQuery] = useState('')
-  const [sort, setSort] = useState('featured')
-  const [minRating, setMinRating] = useState(0)
-  const [inStockOnly, setInStockOnly] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('featured');
+  const [minRating, setMinRating] = useState(0);
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
 
   // Sync category from URL
-  const [routeCategory] = useState(() => getRouteCategory(location.pathname))
+  const [routeCategory] = useState(() => getRouteCategory(location.pathname));
 
   // Fetch products (unchanged API call)
   useEffect(() => {
-    setLoading(true)
+    setLoading(true);
     getProducts()
       .then((data) => setProducts((data.items || []).map(normalizeProduct)))
       .catch(() => setError('Unable to load products. Please try again.'))
-      .finally(() => setLoading(false))
-  }, [])
+      .finally(() => setLoading(false));
+  }, []);
 
   // Derived list of unique categories from backend data
   const productCategories = useMemo(
     () => ['All', ...Array.from(new Set(products.map((p) => p.category).filter(Boolean)))],
     [products]
-  )
-  const [selectedCategory, setSelectedCategory] = useState('All')
+  );
+  const [selectedCategory, setSelectedCategory] = useState('All');
 
   // Apply filters + sort
   const filteredProducts = useMemo(() => {
-    let list = [...products]
+    let list = [...products];
 
     // Route-based filtering (new-arrivals, etc.)
-    if (routeCategory === 'New Arrivals') list = list.filter((p) => p.badge === 'New Arrival')
-    else if (routeCategory === 'Sale') list = list.filter((p) => (p.discount ?? 0) > 0)
+    if (routeCategory === 'New Arrivals') list = list.filter((p) => p.badge === 'New Arrival');
+    else if (routeCategory === 'Sale') list = list.filter((p) => (p.discount ?? 0) > 0);
 
     // Sidebar filters
-    if (selectedCategory !== 'All') list = list.filter((p) => p.category === selectedCategory)
+    if (selectedCategory !== 'All') list = list.filter((p) => p.category === selectedCategory);
     if (query.trim()) {
-      const q = query.toLowerCase()
-      list = list.filter((p) =>
-        `${p.name} ${p.description ?? ''} ${p.category ?? ''}`.toLowerCase().includes(q)
-      )
+      const q = query.toLowerCase();
+      list = list.filter((p) => `${p.name} ${p.description ?? ''} ${p.category ?? ''}`.toLowerCase().includes(q));
     }
-    if (minRating > 0) list = list.filter((p) => (p.rating ?? 0) >= minRating)
-    if (inStockOnly) list = list.filter((p) => (p.stock ?? 10) > 0)
+    if (minRating > 0) list = list.filter((p) => (p.rating ?? 0) >= minRating);
+    if (inStockOnly) list = list.filter((p) => (p.stock ?? 10) > 0);
 
     // Sort
     switch (sort) {
-      case 'price-low': return list.sort((a, b) => a.price - b.price)
-      case 'price-high': return list.sort((a, b) => b.price - a.price)
-      case 'rating': return list.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
-      case 'newest': return list.reverse()
-      default: return list
+      case 'price-low':
+        return list.sort((a, b) => a.price - b.price);
+      case 'price-high':
+        return list.sort((a, b) => b.price - a.price);
+      case 'rating':
+        return list.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+      case 'newest':
+        return list.reverse();
+      default:
+        return list;
     }
-  }, [products, query, sort, selectedCategory, minRating, inStockOnly, routeCategory])
+  }, [products, query, sort, selectedCategory, minRating, inStockOnly, routeCategory]);
 
   const clearFilters = () => {
-    setQuery('')
-    setSelectedCategory('All')
-    setMinRating(0)
-    setInStockOnly(false)
-    setSort('featured')
-  }
+    setQuery('');
+    setSelectedCategory('All');
+    setMinRating(0);
+    setInStockOnly(false);
+    setSort('featured');
+  };
 
-  const hasActiveFilters = query || selectedCategory !== 'All' || minRating > 0 || inStockOnly
+  const hasActiveFilters = query || selectedCategory !== 'All' || minRating > 0 || inStockOnly;
 
   // Page title from route
-  const pageTitle = routeCategory !== 'All' ? routeCategory : 'All Products'
+  const pageTitle = routeCategory !== 'All' ? routeCategory : 'All Products';
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 lg:px-8 page-enter">
       {/* Page header */}
       <div className="mb-6">
         <nav className="mb-2 flex items-center gap-2 text-xs text-slate-400">
-          <Link to="/" className="hover:text-indigo-600 transition">Home</Link>
+          <Link to="/" className="hover:text-indigo-600 transition">
+            Home
+          </Link>
           <span>/</span>
           <span className="text-slate-600 font-medium">{pageTitle}</span>
         </nav>
@@ -138,7 +147,10 @@ export function ProductsPage() {
                 className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-9 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50"
               />
               {query && (
-                <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <button
+                  onClick={() => setQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
                   <X size={14} />
                 </button>
               )}
@@ -153,10 +165,15 @@ export function ProductsPage() {
                 className="appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-8 text-sm outline-none transition focus:border-indigo-400 cursor-pointer"
               >
                 {SORT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
                 ))}
               </select>
-              <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <ChevronDown
+                size={14}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
             </div>
 
             {/* Filter toggle (mobile) */}
@@ -245,7 +262,9 @@ export function ProductsPage() {
                     key={r}
                     onClick={() => setMinRating(minRating === r ? 0 : r)}
                     className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
-                      minRating === r ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
+                      minRating === r
+                        ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                        : 'text-slate-600 hover:bg-slate-50'
                     }`}
                   >
                     <span className="text-amber-400">{'★'.repeat(r)}</span>
@@ -297,19 +316,19 @@ export function ProductsPage() {
           ) : filteredProducts.length === 0 ? (
             <EmptyState
               title="No products found"
-              description={hasActiveFilters ? "Try adjusting your filters or search term." : "No products are available right now."}
-              actionLabel={hasActiveFilters ? "Clear Filters" : undefined}
+              description={
+                hasActiveFilters ? 'Try adjusting your filters or search term.' : 'No products are available right now.'
+              }
+              actionLabel={hasActiveFilters ? 'Clear Filters' : undefined}
               onAction={hasActiveFilters ? clearFilters : undefined}
             />
           ) : (
             <div
               className={
-                viewMode === 'grid'
-                  ? 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-                  : 'flex flex-col gap-4'
+                viewMode === 'grid' ? 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'flex flex-col gap-4'
               }
             >
-              {filteredProducts.map((product) => (
+              {filteredProducts.map((product) =>
                 viewMode === 'grid' ? (
                   <ProductCard
                     key={product.id}
@@ -320,25 +339,42 @@ export function ProductsPage() {
                   />
                 ) : (
                   // List view card
-                  <div key={product.id} className="flex gap-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
-                    <Link to={`/products/${product.id}`} className="block h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-slate-100">
+                  <div
+                    key={product.id}
+                    className="flex gap-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md"
+                  >
+                    <Link
+                      to={`/products/${product.id}`}
+                      className="block h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-slate-100"
+                    >
                       {product.image && (
-                        <img src={product.image} alt={product.name} loading="lazy" className="h-full w-full object-cover" />
+                        <img
+                          src={product.image}
+                          alt={product.name}
+                          loading="lazy"
+                          className="h-full w-full object-cover"
+                        />
                       )}
                     </Link>
                     <div className="flex flex-1 flex-col justify-between">
                       <div>
                         {product.category && (
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{product.category}</p>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                            {product.category}
+                          </p>
                         )}
                         <Link to={`/products/${product.id}`}>
-                          <h3 className="mt-0.5 font-semibold text-slate-900 hover:text-indigo-600 transition line-clamp-1">{product.name}</h3>
+                          <h3 className="mt-0.5 font-semibold text-slate-900 hover:text-indigo-600 transition line-clamp-1">
+                            {product.name}
+                          </h3>
                         </Link>
                         <p className="mt-1 text-xs text-slate-500 line-clamp-2">{product.description}</p>
                       </div>
                       <div className="mt-2 flex items-center justify-between">
                         <div>
-                          <span className="font-bold text-slate-900">₹{Number(product.price).toLocaleString('en-IN')}</span>
+                          <span className="font-bold text-slate-900">
+                            ₹{Number(product.price).toLocaleString('en-IN')}
+                          </span>
                           {product.discount > 0 && (
                             <span className="ml-2 text-xs font-medium text-emerald-600">{product.discount}% off</span>
                           )}
@@ -353,11 +389,11 @@ export function ProductsPage() {
                     </div>
                   </div>
                 )
-              ))}
+              )}
             </div>
           )}
         </div>
       </div>
     </div>
-  )
+  );
 }

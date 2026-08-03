@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom';
 
 export function NotFoundPage() {
   return (
@@ -7,8 +7,10 @@ export function NotFoundPage() {
         <p className="text-sm uppercase tracking-[0.3em] text-amber-700">404</p>
         <h1 className="mt-3 text-4xl text-stone-800">Page not found</h1>
         <p className="mt-4 text-stone-600">The page you are looking for does not exist in our collection.</p>
-        <Link to="/" className="mt-6 inline-flex rounded-full bg-stone-900 px-6 py-3 font-medium text-white">Return Home</Link>
+        <Link to="/" className="mt-6 inline-flex rounded-full bg-stone-900 px-6 py-3 font-medium text-white">
+          Return Home
+        </Link>
       </div>
     </div>
-  )
+  );
 }

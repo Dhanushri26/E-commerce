@@ -1,22 +1,30 @@
-import { useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  UserRound, Heart, ShoppingBag, Settings, LogOut, Package,
-  ArrowRight, Mail, Shield, ChevronRight
-} from "lucide-react";
-import { signOut } from "aws-amplify/auth";
-import { useAppContext } from "../context/AppContext";
+  UserRound,
+  Heart,
+  ShoppingBag,
+  Settings,
+  LogOut,
+  Package,
+  ArrowRight,
+  Mail,
+  Shield,
+  ChevronRight,
+} from 'lucide-react';
+import { signOut } from 'aws-amplify/auth';
+import { useAppContext } from '../context/AppContext';
 
 function statusColor(status) {
   const map = {
-    DELIVERED: "bg-emerald-100 text-emerald-700",
-    SHIPPED: "bg-purple-100 text-purple-700",
-    PROCESSING: "bg-indigo-100 text-indigo-700",
-    CONFIRMED: "bg-sky-100 text-sky-700",
-    CANCELLED: "bg-red-100 text-red-700",
-    PENDING_PAYMENT: "bg-amber-100 text-amber-700",
+    DELIVERED: 'bg-emerald-100 text-emerald-700',
+    SHIPPED: 'bg-purple-100 text-purple-700',
+    PROCESSING: 'bg-indigo-100 text-indigo-700',
+    CONFIRMED: 'bg-sky-100 text-sky-700',
+    CANCELLED: 'bg-red-100 text-red-700',
+    PENDING_PAYMENT: 'bg-amber-100 text-amber-700',
   };
-  return map[status] ?? "bg-slate-100 text-slate-600";
+  return map[status] ?? 'bg-slate-100 text-slate-600';
 }
 
 export function ProfilePage() {
@@ -31,57 +39,58 @@ export function ProfilePage() {
       await signOut();
       window.location.reload();
     } catch (err) {
-      console.error("Sign out error:", err);
+      console.error('Sign out error:', err);
     }
   };
 
-  const roleBadgeColor = {
-    Admin: "bg-red-100 text-red-700",
-    Business: "bg-blue-100 text-blue-700",
-    Customer: "bg-emerald-100 text-emerald-700",
-  }[user?.role] ?? "bg-slate-100 text-slate-600";
+  const roleBadgeColor =
+    {
+      Admin: 'bg-red-100 text-red-700',
+      Business: 'bg-blue-100 text-blue-700',
+      Customer: 'bg-emerald-100 text-emerald-700',
+    }[user?.role] ?? 'bg-slate-100 text-slate-600';
 
   const stats = [
     {
       icon: Package,
-      title: "My Orders",
-      value: ordersLoading ? "…" : orders.length,
-      sub: `${orders.filter((o) => o.orderStatus === "DELIVERED").length} delivered`,
-      link: "/orders",
-      color: "bg-indigo-50 text-indigo-600",
+      title: 'My Orders',
+      value: ordersLoading ? '…' : orders.length,
+      sub: `${orders.filter((o) => o.orderStatus === 'DELIVERED').length} delivered`,
+      link: '/orders',
+      color: 'bg-indigo-50 text-indigo-600',
     },
     {
       icon: Heart,
-      title: "Wishlist",
+      title: 'Wishlist',
       value: wishlist.length,
       sub: `${wishlist.length} saved items`,
-      link: "/wishlist",
-      color: "bg-red-50 text-red-500",
+      link: '/wishlist',
+      color: 'bg-red-50 text-red-500',
     },
     {
       icon: ShoppingBag,
-      title: "Cart",
+      title: 'Cart',
       value: cart.length,
       sub: `${cart.reduce((s, i) => s + (i.quantity ?? 1), 0)} items total`,
-      link: "/cart",
-      color: "bg-amber-50 text-amber-600",
+      link: '/cart',
+      color: 'bg-amber-50 text-amber-600',
     },
     {
       icon: Settings,
-      title: "Settings",
-      value: "—",
-      sub: "Preferences & alerts",
-      link: "#",
-      color: "bg-slate-50 text-slate-500",
+      title: 'Settings',
+      value: '—',
+      sub: 'Preferences & alerts',
+      link: '#',
+      color: 'bg-slate-50 text-slate-500',
     },
   ];
 
   // Avatar initials
-  const initials = (user?.name || user?.email || "U")
-    .split(" ")
+  const initials = (user?.name || user?.email || 'U')
+    .split(' ')
     .map((w) => w[0])
     .slice(0, 2)
-    .join("")
+    .join('')
     .toUpperCase();
 
   return (
@@ -97,16 +106,18 @@ export function ProfilePage() {
               {initials}
             </div>
             <div>
-              <h1 className="text-xl font-bold">Welcome back, {user?.name || "Guest"}!</h1>
+              <h1 className="text-xl font-bold">Welcome back, {user?.name || 'Guest'}!</h1>
               {user?.email && (
                 <div className="mt-1 flex items-center gap-1.5 text-sm text-indigo-200">
                   <Mail size={13} />
                   <span>{user.email}</span>
                 </div>
               )}
-              <span className={`mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${roleBadgeColor}`}>
+              <span
+                className={`mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${roleBadgeColor}`}
+              >
                 <Shield size={11} />
-                {user?.role || "Customer"}
+                {user?.role || 'Customer'}
               </span>
             </div>
           </div>
@@ -130,7 +141,7 @@ export function ProfilePage() {
             <Link
               key={item.title}
               to={item.link}
-              id={`profile-${item.title.toLowerCase().replace(/\s/g, "-")}-card`}
+              id={`profile-${item.title.toLowerCase().replace(/\s/g, '-')}-card`}
               className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               <div className={`inline-flex rounded-xl p-2.5 ${item.color}`}>
@@ -171,17 +182,17 @@ export function ProfilePage() {
         ) : orders.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-slate-200 p-6 text-center">
             <p className="text-sm text-slate-400">No orders yet.</p>
-            <Link to="/products" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:underline">
+            <Link
+              to="/products"
+              className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:underline"
+            >
               Start Shopping <ArrowRight size={12} />
             </Link>
           </div>
         ) : (
           <div className="mt-4 space-y-2">
             {orders.slice(0, 4).map((order) => (
-              <div
-                key={order.orderId}
-                className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3"
-              >
+              <div key={order.orderId} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
                 <div className="flex items-center gap-3">
                   <Package size={15} className="text-slate-400" />
                   <div>
@@ -189,16 +200,18 @@ export function ProfilePage() {
                       #{order.orderId?.substring(0, 8).toUpperCase()}
                     </p>
                     <p className="text-xs text-slate-400">
-                      {order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-IN") : "—"}
+                      {order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN') : '—'}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="font-semibold text-slate-800 text-sm">
-                    ₹{Number(order.totalAmount || 0).toLocaleString("en-IN")}
+                    ₹{Number(order.totalAmount || 0).toLocaleString('en-IN')}
                   </span>
-                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${statusColor(order.orderStatus)}`}>
-                    {order.orderStatus?.replace(/_/g, " ")}
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${statusColor(order.orderStatus)}`}
+                  >
+                    {order.orderStatus?.replace(/_/g, ' ')}
                   </span>
                 </div>
               </div>
@@ -212,10 +225,10 @@ export function ProfilePage() {
         <h2 className="mb-4 text-base font-bold text-slate-900">Account Information</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           {[
-            { label: "Name", value: user?.name || "—" },
-            { label: "Email", value: user?.email || "—" },
-            { label: "Role", value: user?.role || "Customer" },
-            { label: "Member Since", value: "2024" },
+            { label: 'Name', value: user?.name || '—' },
+            { label: 'Email', value: user?.email || '—' },
+            { label: 'Role', value: user?.role || 'Customer' },
+            { label: 'Member Since', value: '2024' },
           ].map(({ label, value }) => (
             <div key={label} className="rounded-xl bg-slate-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>

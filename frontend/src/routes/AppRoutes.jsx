@@ -1,41 +1,31 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from 'react-router-dom';
 
-import { MainLayout } from "../layouts/MainLayout";
-import AdminLayout from "../layouts/AdminLayout";
+import { MainLayout } from '../layouts/MainLayout';
+import AdminLayout from '../layouts/AdminLayout';
 
-import { HomePage } from "../pages/HomePage";
-import { ProductsPage } from "../pages/ProductsPage";
-import { ProductDetailPage } from "../pages/ProductDetailPage";
-import { CartPage } from "../pages/CartPage";
-import { CheckoutPage } from "../pages/CheckoutPage";
-import { OrdersPage } from "../pages/OrdersPage";
-import { ProfilePage } from "../pages/ProfilePage";
-import { WishlistPage } from "../pages/WishlistPage";
-import { AdminPage } from "../pages/AdminPage";
-import { AboutPage } from "../pages/AboutPage";
-import { ContactPage } from "../pages/ContactPage";
-import { OffersPage } from "../pages/OffersPage";
-import { NotFoundPage } from "../pages/NotFoundPage";
+import { HomePage } from '../pages/HomePage';
+import { ProductsPage } from '../pages/ProductsPage';
+import { ProductDetailPage } from '../pages/ProductDetailPage';
+import { CartPage } from '../pages/CartPage';
+import { CheckoutPage } from '../pages/CheckoutPage';
+import { OrdersPage } from '../pages/OrdersPage';
+import { ProfilePage } from '../pages/ProfilePage';
+import { WishlistPage } from '../pages/WishlistPage';
+import { AdminPage } from '../pages/AdminPage';
+import { AboutPage } from '../pages/AboutPage';
+import { ContactPage } from '../pages/ContactPage';
+import { OffersPage } from '../pages/OffersPage';
+import { NotFoundPage } from '../pages/NotFoundPage';
 
-import AdminRoute from "../components/AdminRoute";
+import AdminRoute from '../components/AdminRoute';
 
 export default function AppRoutes({ initialRoute }) {
   return (
     <Routes>
-
       {/* Customer Layout */}
 
       <Route path="/" element={<MainLayout />}>
-        <Route
-          index
-          element={
-            initialRoute === "/admin" ? (
-              <Navigate to="/admin" replace />
-            ) : (
-              <HomePage />
-            )
-          }
-        />
+        <Route index element={initialRoute === '/admin' ? <Navigate to="/admin" replace /> : <HomePage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="jewelry" element={<ProductsPage />} />
         <Route path="collections" element={<ProductsPage />} />
@@ -61,22 +51,12 @@ export default function AppRoutes({ initialRoute }) {
           </AdminRoute>
         }
       >
-        <Route
-          path="/admin"
-          element={<AdminPage />}
-        />
+        <Route path="/admin" element={<AdminPage />} />
       </Route>
 
-      <Route
-        path="/404"
-        element={<NotFoundPage />}
-      />
+      <Route path="/404" element={<NotFoundPage />} />
 
-      <Route
-        path="*"
-        element={<Navigate to="/404" replace />}
-      />
-
+      <Route path="*" element={<Navigate to="/404" replace />} />
     </Routes>
   );
 }

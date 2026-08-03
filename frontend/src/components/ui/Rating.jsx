@@ -1,8 +1,8 @@
-import { Star } from 'lucide-react'
-import { cn } from '../../lib/utils'
+import { Star } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 export function Rating({ value = 0, reviews, size = 'sm', showCount = true, className }) {
-  const iconSize = size === 'lg' ? 20 : size === 'md' ? 16 : 14
+  const iconSize = size === 'lg' ? 20 : size === 'md' ? 16 : 14;
 
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
@@ -12,9 +12,7 @@ export function Rating({ value = 0, reviews, size = 'sm', showCount = true, clas
           {Number(value).toFixed(1)}
         </span>
       </div>
-      {showCount && reviews != null && (
-        <span className="text-slate-500 text-sm">({reviews} reviews)</span>
-      )}
+      {showCount && reviews != null && <span className="text-slate-500 text-sm">({reviews} reviews)</span>}
     </div>
-  )
+  );
 }

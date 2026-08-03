@@ -5,6 +5,7 @@ The frontend for the **ShopSphere** modern e-commerce platform. Built with **Rea
 ---
 
 ## 🎨 Design System & Aesthetic
+
 - **Indigo & Slate Theme:** Clean, neutral palette with vibrant highlights (Success: Emerald, Warning: Amber, Error: Red, Primary Accent: Indigo).
 - **Responsive Layouts:** Seamless support for Desktop, Tablet, and Mobile viewport sizes without layout shifts.
 - **Rich Visuals:** Rounded cards, dynamic hover micro-animations, custom scrollbars, and premium loading skeletons.
@@ -14,29 +15,38 @@ The frontend for the **ShopSphere** modern e-commerce platform. Built with **Rea
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Node.js (v18+)
 - npm or yarn
 
 ### Installation
+
 ```bash
 npm install
 ```
 
 ### Run Locally (Development Mode)
+
 ```bash
 npm run dev
 ```
+
 The server will boot up locally at `http://localhost:5173`.
 
 ### Production Build
+
 To build the production bundle:
+
 ```bash
 npm run build
 ```
+
 This generates the optimized, production-ready bundle inside the `dist/` directory.
 
 ### Run Unit Tests
+
 To run Vitest verification suite:
+
 ```bash
 npm test
 ```
@@ -44,6 +54,7 @@ npm test
 ---
 
 ## 📂 Architecture & Directory Details
+
 - `/src/api/` — API clients & Axios interceptors with Cognito token authorization headers injection.
 - `/src/components/` — Reusable components (`ProductCard`, `SearchBar`, etc.) and subfolders for UI elements & Admin panels.
 - `/src/context/` — Context API logic managing global cart, wishlist, orders, user authentication session states.
@@ -54,6 +65,7 @@ npm test
 ---
 
 ## 📋 Technology Integrations
+
 - **AWS Cognito Auth:** Fully integrated using `@aws-amplify/auth` v6.
 - **REST APIs:** Axios client configured with CORS credentials proxy handles requests to Lambda endpoints.
 - **State Caching:** TanStack React Query handles network caches efficiently.

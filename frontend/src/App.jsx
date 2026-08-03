@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter } from "react-router-dom";
-import { fetchAuthSession } from "aws-amplify/auth";
+import { useCallback, useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter } from 'react-router-dom';
+import { fetchAuthSession } from 'aws-amplify/auth';
 
-import AppRoutes from "./routes/AppRoutes";
-import { AppProvider } from "./context/AppContext";
-import { ErrorBoundary } from "./components/ui/error-boundary";
-import LoginPage from "./pages/LoginPage";
+import AppRoutes from './routes/AppRoutes';
+import { AppProvider } from './context/AppContext';
+import { ErrorBoundary } from './components/ui/error-boundary';
+import LoginPage from './pages/LoginPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,7 +20,7 @@ const queryClient = new QueryClient({
 function App() {
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [initialRoute, setInitialRoute] = useState("/");
+  const [initialRoute, setInitialRoute] = useState('/');
 
   const checkSession = useCallback(async () => {
     setLoading(true);
@@ -32,13 +32,13 @@ function App() {
         const idToken = session.tokens.idToken?.toString();
 
         if (idToken) {
-          const payload = JSON.parse(atob(idToken.split(".")[1]));
-          const groups = payload["cognito:groups"] || [];
+          const payload = JSON.parse(atob(idToken.split('.')[1]));
+          const groups = payload['cognito:groups'] || [];
 
-          if (groups.includes("Admin")) {
-            setInitialRoute("/admin");
+          if (groups.includes('Admin')) {
+            setInitialRoute('/admin');
           } else {
-            setInitialRoute("/");
+            setInitialRoute('/');
           }
         }
 
@@ -46,7 +46,7 @@ function App() {
         return;
       }
     } catch (err) {
-      console.log("No existing session");
+      console.log('No existing session');
     } finally {
       setLoading(false);
     }

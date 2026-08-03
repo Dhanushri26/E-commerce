@@ -1,11 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { ScanCommand } from "@aws-sdk/lib-dynamodb";
-import {
-  GetCommand,
-  QueryCommand,
-  PutCommand,
-  UpdateCommand
-} from "@aws-sdk/lib-dynamodb";
+import { randomUUID } from 'node:crypto';
+import { ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, QueryCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import {
   buildResponse,
   createErrorResponse,
@@ -15,7 +10,7 @@ import {
   parseJsonBody,
   createAuditFields,
   updateAuditFields,
-} from "./shared.js";
+} from './shared.js';
 
 const normalizeQuantity = (v) => {
   const parsed = Number(v ?? 0);
@@ -49,7 +44,7 @@ const appendAuditRecord = async (docClient, tableName, productId, action, qty, u
     quantity: qty,
     performedBy: userId,
     timestamp: now,
-    reason: reason || "Manual Inventory Operation Update"
+    reason: reason || 'Manual Inventory Operation Update',
   };
   await docClient.send(new PutCommand({ TableName: tableName, Item: auditItem }));
 };
@@ -58,101 +53,87 @@ const appendAuditRecord = async (docClient, tableName, productId, action, qty, u
 // MAIN AWS LAMBDA HANDLER
 // ==========================================
 export const handler = async (event) => {
-  
   try {
-
     // ==========================================
-// SQS EVENT PROCESSING
-// ==========================================
-if (event.Records && event.Records[0]?.eventSource === "aws:sqs") {
+    // SQS EVENT PROCESSING
+    // ==========================================
+    if (event.Records && event.Records[0]?.eventSource === 'aws:sqs') {
+      console.log('Received SQS Event');
+      console.log(JSON.stringify(event, null, 2));
 
-  console.log("Received SQS Event");
-  console.log(JSON.stringify(event, null, 2));
+      const { docClient, inventoryTable } = getDbClient();
 
-  const { docClient, inventoryTable } = getDbClient();
+      for (const record of event.Records) {
+        const message = JSON.parse(record.body);
 
-  for (const record of event.Records) {
+        console.log('Message:', message);
 
-      const message = JSON.parse(record.body);
-
-      console.log("Message:", message);
-
-      if (message.eventType !== "ORDER_CREATED") {
+        if (message.eventType !== 'ORDER_CREATED') {
           continue;
-      }
+        }
 
-      for (const item of message.items) {
+        for (const item of message.items) {
+          console.log(`Updating inventory for ${item.productId} (Qty: ${item.quantity})`);
 
-        console.log(
-            `Updating inventory for ${item.productId} (Qty: ${item.quantity})`
-        );
-    
-        await docClient.send(
+          await docClient.send(
             new UpdateCommand({
-                TableName: inventoryTable,
-                Key: {
-                    PK: `INVENTORY#${item.productId}`,
-                    SK: "STOCK",
-                },
-    
-                UpdateExpression: `
+              TableName: inventoryTable,
+              Key: {
+                PK: `INVENTORY#${item.productId}`,
+                SK: 'STOCK',
+              },
+
+              UpdateExpression: `
                     SET
                         availableQuantity = availableQuantity - :qty,
                         updatedAt = :now
                 `,
-    
-                ConditionExpression: `
+
+              ConditionExpression: `
                     attribute_exists(PK)
                     AND availableQuantity >= :qty
                 `,
-    
-                ExpressionAttributeValues: {
-                    ":qty": Number(item.quantity),
-                    ":now": new Date().toISOString(),
-                },
-    
-                ReturnValues: "ALL_NEW",
-            })
-        );
-    
-        console.log(
-            `Inventory updated successfully for ${item.productId}`
-        );
-    }
-  }
 
-  return;
-}
+              ExpressionAttributeValues: {
+                ':qty': Number(item.quantity),
+                ':now': new Date().toISOString(),
+              },
+
+              ReturnValues: 'ALL_NEW',
+            })
+          );
+
+          console.log(`Inventory updated successfully for ${item.productId}`);
+        }
+      }
+
+      return;
+    }
 
     const method = event?.httpMethod || event?.requestContext?.httpMethod || event?.requestContext?.http?.method;
-    const path = event?.rawPath || event?.path || "";
+    const path = event?.rawPath || event?.path || '';
     const userContext = extractUserContext(event);
-    const {
-      docClient,
-      inventoryTable,
-      productTable
-  } = getDbClient();
+    const { docClient, inventoryTable, productTable } = getDbClient();
 
     if (!canReadInventory(userContext)) {
-      return createErrorResponse(403, "Access unauthorized");
+      return createErrorResponse(403, 'Access unauthorized');
     }
 
     // ------------------------------------------
     // GET /inventory (List Stock Profiles)
     // ------------------------------------------
-    if (method === "GET" && (path === "/inventory" || path === "/inventory/")) {
-     const result = await docClient.send(
-  new ScanCommand({
-    TableName: inventoryTable,
-   FilterExpression:
-"begins_with(PK,:pk) AND SK=:sk AND isDeleted=:deleted",
-ExpressionAttributeValues:{
-    ":pk":"INVENTORY#",
-    ":sk":"STOCK",
-    ":deleted":false
-}
-  })
-);
+    if (method === 'GET' && (path === '/inventory' || path === '/inventory/')) {
+      const result = await docClient.send(
+        new ScanCommand({
+          TableName: inventoryTable,
+          FilterExpression: 'begins_with(PK,:pk) AND SK=:sk AND isDeleted=:deleted',
+          ExpressionAttributeValues: {
+            ':pk': 'INVENTORY#',
+            ':sk': 'STOCK',
+            ':deleted': false,
+          },
+        })
+      );
 
       const items = result.Items || [];
       return buildResponse(200, {
@@ -164,17 +145,19 @@ ExpressionAttributeValues:{
     // ------------------------------------------
     // GET /inventory/{productId} (Inspect Details)
     // ------------------------------------------
-    if (method === "GET" && path.startsWith("/inventory/")) {
+    if (method === 'GET' && path.startsWith('/inventory/')) {
       const productId = getPathParam(event, 1);
-      if (!productId) return createErrorResponse(400, "Product specification parameter missing");
+      if (!productId) return createErrorResponse(400, 'Product specification parameter missing');
 
-      const res = await docClient.send(new GetCommand({
-        TableName: inventoryTable,
-        Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" }
-      }));
+      const res = await docClient.send(
+        new GetCommand({
+          TableName: inventoryTable,
+          Key: { PK: `INVENTORY#${productId}`, SK: 'STOCK' },
+        })
+      );
 
       const inventory = res.Item;
-      if (!inventory || inventory.isDeleted) return createErrorResponse(404, "Stock profile not found");
+      if (!inventory || inventory.isDeleted) return createErrorResponse(404, 'Stock profile not found');
 
       return buildResponse(200, buildInventoryResponse(inventory));
     }
@@ -182,33 +165,41 @@ ExpressionAttributeValues:{
     // ------------------------------------------
     // POST /inventory (Initialize Inventory Node)
     // ------------------------------------------
-    if (method === "POST" && path === "/inventory") {
-      if (!canManageInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
+    if (method === 'POST' && path === '/inventory') {
+      if (!canManageInventory(userContext)) return createErrorResponse(403, 'Access unauthorized');
 
       const body = parseJsonBody(event);
-      const productId = typeof body.productId === "string" ? body.productId.trim() : null;
-      if (!productId) return createErrorResponse(422, "Valid productId missing from body payload");
+      const productId = typeof body.productId === 'string' ? body.productId.trim() : null;
+      if (!productId) return createErrorResponse(422, 'Valid productId missing from body payload');
 
       // Verify Product reference entity existence directly inside the catalog domain prefix
-      const prodRes = await docClient.send(new GetCommand({
-        TableName: productTable,
-        Key: { PK: `PRODUCT#${productId}`, SK: "METADATA" }
-      }));
-      if (!prodRes.Item || prodRes.Item.isDeleted) return createErrorResponse(404, "Base product reference mapping missing");
+      const prodRes = await docClient.send(
+        new GetCommand({
+          TableName: productTable,
+          Key: { PK: `PRODUCT#${productId}`, SK: 'METADATA' },
+        })
+      );
+      if (!prodRes.Item || prodRes.Item.isDeleted)
+        return createErrorResponse(404, 'Base product reference mapping missing');
 
       // Verify uniqueness of the stock record
-      const existRes = await docClient.send(new GetCommand({
-        TableName: inventoryTable,
-        Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" }
-      }));
-      if (existRes.Item && !existRes.Item.isDeleted) return createErrorResponse(409, "Inventory record context collision");
+      const existRes = await docClient.send(
+        new GetCommand({
+          TableName: inventoryTable,
+          Key: { PK: `INVENTORY#${productId}`, SK: 'STOCK' },
+        })
+      );
+      if (existRes.Item && !existRes.Item.isDeleted)
+        return createErrorResponse(409, 'Inventory record context collision');
 
-      const availableQuantity = normalizeQuantity(body.availableQuantity ?? body.initialInventoryQuantity ?? DEFAULT_INITIAL_INVENTORY_QUANTITY);
+      const availableQuantity = normalizeQuantity(
+        body.availableQuantity ?? body.initialInventoryQuantity ?? DEFAULT_INITIAL_INVENTORY_QUANTITY
+      );
       const now = new Date().toISOString();
 
       const inventoryDoc = {
         PK: `INVENTORY#${productId}`,
-        SK: "STOCK",
+        SK: 'STOCK',
         inventoryId: body.inventoryId || randomUUID(),
         productId,
         availableQuantity,
@@ -216,11 +207,11 @@ ExpressionAttributeValues:{
         damagedQuantity: normalizeQuantity(body.damagedQuantity),
         reorderThreshold: normalizeQuantity(body.reorderThreshold),
         warehouseId: body.warehouseId || null,
-        inventoryStatus: body.inventoryStatus || (availableQuantity > 0 ? "AVAILABLE" : "OUT_OF_STOCK"),
+        inventoryStatus: body.inventoryStatus || (availableQuantity > 0 ? 'AVAILABLE' : 'OUT_OF_STOCK'),
         isDeleted: false,
         createdAt: now,
         updatedAt: now,
-        ...createAuditFields(userContext.userId || "system")
+        ...createAuditFields(userContext.userId || 'system'),
       };
 
       await docClient.send(new PutCommand({ TableName: inventoryTable, Item: inventoryDoc }));
@@ -230,72 +221,58 @@ ExpressionAttributeValues:{
     // ------------------------------------------
     // PUT /inventory/{productId} (Update Fields)
     // ------------------------------------------
-    if (method === "PUT" && path.startsWith("/inventory/")) {
-
+    if (method === 'PUT' && path.startsWith('/inventory/')) {
       const productId = getPathParam(event, 1);
-    
-      if (!productId)
-        return createErrorResponse(400, "Product specification missing");
-    
-      if (!canManageInventory(userContext))
-        return createErrorResponse(403, "Access unauthorized");
-    
+
+      if (!productId) return createErrorResponse(400, 'Product specification missing');
+
+      if (!canManageInventory(userContext)) return createErrorResponse(403, 'Access unauthorized');
+
       const body = parseJsonBody(event);
-    
+
       // Read existing inventory
       const existing = await docClient.send(
         new GetCommand({
           TableName: inventoryTable,
           Key: {
             PK: `INVENTORY#${productId}`,
-            SK: "STOCK",
+            SK: 'STOCK',
           },
         })
       );
-    
-      if (!existing.Item)
-        return createErrorResponse(404, "Inventory not found");
-    
+
+      if (!existing.Item) return createErrorResponse(404, 'Inventory not found');
+
       const availableQuantity =
         body.availableQuantity !== undefined
           ? normalizeQuantity(body.availableQuantity)
           : existing.Item.availableQuantity;
-    
-      const reservedQuantity =
-        body.reservedQuantity !== undefined
-          ? normalizeQuantity(body.reservedQuantity)
-          : existing.Item.reservedQuantity;
-    
-      const damagedQuantity =
-        body.damagedQuantity !== undefined
-          ? normalizeQuantity(body.damagedQuantity)
-          : existing.Item.damagedQuantity;
-    
-      const reorderThreshold =
-        body.reorderThreshold !== undefined
-          ? normalizeQuantity(body.reorderThreshold)
-          : existing.Item.reorderThreshold;
-    
-          let inventoryStatus = "IN_STOCK";
 
-          if (availableQuantity <= 0) {
-              inventoryStatus = "OUT_OF_STOCK";
-          }
-          else if (
-              availableQuantity <=
-              normalizeQuantity(body.reorderThreshold)
-          ) {
-              inventoryStatus = "LOW_STOCK";
-          }
-    
+      const reservedQuantity =
+        body.reservedQuantity !== undefined ? normalizeQuantity(body.reservedQuantity) : existing.Item.reservedQuantity;
+
+      const damagedQuantity =
+        body.damagedQuantity !== undefined ? normalizeQuantity(body.damagedQuantity) : existing.Item.damagedQuantity;
+
+      const reorderThreshold =
+        body.reorderThreshold !== undefined ? normalizeQuantity(body.reorderThreshold) : existing.Item.reorderThreshold;
+
+      let inventoryStatus = 'IN_STOCK';
+
+      if (availableQuantity <= 0) {
+        inventoryStatus = 'OUT_OF_STOCK';
+      } else if (availableQuantity <= normalizeQuantity(body.reorderThreshold)) {
+        inventoryStatus = 'LOW_STOCK';
+      }
+
       const result = await docClient.send(
         new UpdateCommand({
           TableName: inventoryTable,
           Key: {
             PK: `INVENTORY#${productId}`,
-            SK: "STOCK",
+            SK: 'STOCK',
           },
-    
+
           UpdateExpression: `
             SET
             availableQuantity = :aq,
@@ -305,67 +282,74 @@ ExpressionAttributeValues:{
             inventoryStatus = :status,
             updatedAt = :now
           `,
-    
+
           ExpressionAttributeValues: {
-            ":aq": availableQuantity,
-            ":rq": reservedQuantity,
-            ":dq": damagedQuantity,
-            ":rt": reorderThreshold,
-            ":status": inventoryStatus,
-            ":now": new Date().toISOString(),
+            ':aq': availableQuantity,
+            ':rq': reservedQuantity,
+            ':dq': damagedQuantity,
+            ':rt': reorderThreshold,
+            ':status': inventoryStatus,
+            ':now': new Date().toISOString(),
           },
-    
-          ConditionExpression: "attribute_exists(PK)",
-    
-          ReturnValues: "ALL_NEW",
+
+          ConditionExpression: 'attribute_exists(PK)',
+
+          ReturnValues: 'ALL_NEW',
         })
       );
-    
-      return buildResponse(
-        200,
-        buildInventoryResponse(result.Attributes)
-      );
+
+      return buildResponse(200, buildInventoryResponse(result.Attributes));
     }
 
     // ------------------------------------------
     // PATCH /inventory/reserve (Allocate Hold)
     // ------------------------------------------
-    if (method === "PATCH" && path === "/inventory/reserve") {
-      if (!canReserveInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
+    if (method === 'PATCH' && path === '/inventory/reserve') {
+      if (!canReserveInventory(userContext)) return createErrorResponse(403, 'Access unauthorized');
 
       const body = parseJsonBody(event);
       const requestedQuantity = normalizeQuantity(body.requestedQuantity);
       const productId = body.productId || body.product_id;
 
       if (!productId || requestedQuantity <= 0) {
-        return createErrorResponse(422, "Valid positive integer requestedQuantity and productId parameters required");
+        return createErrorResponse(422, 'Valid positive integer requestedQuantity and productId parameters required');
       }
 
       const now = new Date().toISOString();
       const ttlOffset = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
       try {
-        const result = await docClient.send(new UpdateCommand({
-          TableName: inventoryTable,
-          Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
-          UpdateExpression: "SET availableQuantity = availableQuantity - :req, reservedQuantity = reservedQuantity + :req, reservationStatus = :resStatus, reservationTTL = :ttl, reservedBy = :uid, reservedAt = :now, updatedAt = :now",
-ConditionExpression:
-"attribute_exists(PK) AND availableQuantity >= :req",
-          ExpressionAttributeValues: {
-            ":req": requestedQuantity,
-            ":resStatus": "RESERVED",
-            ":ttl": ttlOffset,
-            ":uid": userContext.userId,
-            ":now": now
-          },
-          ReturnValues: "ALL_NEW"
-        }));
+        const result = await docClient.send(
+          new UpdateCommand({
+            TableName: inventoryTable,
+            Key: { PK: `INVENTORY#${productId}`, SK: 'STOCK' },
+            UpdateExpression:
+              'SET availableQuantity = availableQuantity - :req, reservedQuantity = reservedQuantity + :req, reservationStatus = :resStatus, reservationTTL = :ttl, reservedBy = :uid, reservedAt = :now, updatedAt = :now',
+            ConditionExpression: 'attribute_exists(PK) AND availableQuantity >= :req',
+            ExpressionAttributeValues: {
+              ':req': requestedQuantity,
+              ':resStatus': 'RESERVED',
+              ':ttl': ttlOffset,
+              ':uid': userContext.userId,
+              ':now': now,
+            },
+            ReturnValues: 'ALL_NEW',
+          })
+        );
 
-        await appendAuditRecord(docClient, inventoryTable, productId, "RESERVE", requestedQuantity, userContext.userId, body.reason);
+        await appendAuditRecord(
+          docClient,
+          inventoryTable,
+          productId,
+          'RESERVE',
+          requestedQuantity,
+          userContext.userId,
+          body.reason
+        );
         return buildResponse(200, buildInventoryResponse(result.Attributes));
       } catch (err) {
-        if (err.name === "ConditionalCheckFailedException") {
-          return createErrorResponse(409, "Allocation failure: Insufficient available stock inventory");
+        if (err.name === 'ConditionalCheckFailedException') {
+          return createErrorResponse(409, 'Allocation failure: Insufficient available stock inventory');
         }
         throw err;
       }
@@ -374,37 +358,52 @@ ConditionExpression:
     // ------------------------------------------
     // PATCH /inventory/release (Revert Reservation)
     // ------------------------------------------
-    if (method === "PATCH" && path === "/inventory/release") {
-      if (!canReserveInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
+    if (method === 'PATCH' && path === '/inventory/release') {
+      if (!canReserveInventory(userContext)) return createErrorResponse(403, 'Access unauthorized');
 
       const body = parseJsonBody(event);
       const requestedQuantity = normalizeQuantity(body.requestedQuantity);
       const productId = body.productId || body.product_id;
 
-      if (!productId || requestedQuantity <= 0) return createErrorResponse(422, "Invalid parameter constraints mapping");
+      if (!productId || requestedQuantity <= 0)
+        return createErrorResponse(422, 'Invalid parameter constraints mapping');
 
       const now = new Date().toISOString();
 
       try {
-        const result = await docClient.send(new UpdateCommand({
-          TableName: inventoryTable,
-          Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
-          UpdateExpression: "SET availableQuantity = availableQuantity + :req, reservedQuantity = reservedQuantity - :req, reservationStatus = :status, reservationTTL = :nullVal, updatedAt = :now",
-          ConditionExpression:"attribute_exists(PK) AND reservedQuantity >= :req",
-          ExpressionAttributeValues: {
-            ":req": requestedQuantity,
-            ":status": "AVAILABLE",
-            ":nullVal": null,
-            ":now": now
-          },
-          ReturnValues: "ALL_NEW"
-        }));
+        const result = await docClient.send(
+          new UpdateCommand({
+            TableName: inventoryTable,
+            Key: { PK: `INVENTORY#${productId}`, SK: 'STOCK' },
+            UpdateExpression:
+              'SET availableQuantity = availableQuantity + :req, reservedQuantity = reservedQuantity - :req, reservationStatus = :status, reservationTTL = :nullVal, updatedAt = :now',
+            ConditionExpression: 'attribute_exists(PK) AND reservedQuantity >= :req',
+            ExpressionAttributeValues: {
+              ':req': requestedQuantity,
+              ':status': 'AVAILABLE',
+              ':nullVal': null,
+              ':now': now,
+            },
+            ReturnValues: 'ALL_NEW',
+          })
+        );
 
-        await appendAuditRecord(docClient, inventoryTable, productId, "RELEASE", requestedQuantity, userContext.userId, body.reason);
+        await appendAuditRecord(
+          docClient,
+          inventoryTable,
+          productId,
+          'RELEASE',
+          requestedQuantity,
+          userContext.userId,
+          body.reason
+        );
         return buildResponse(200, buildInventoryResponse(result.Attributes));
       } catch (err) {
-        if (err.name === "ConditionalCheckFailedException") {
-          return createErrorResponse(409, "Reversion error: Requested release size exceeds current reserved quantities");
+        if (err.name === 'ConditionalCheckFailedException') {
+          return createErrorResponse(
+            409,
+            'Reversion error: Requested release size exceeds current reserved quantities'
+          );
         }
         throw err;
       }
@@ -413,36 +412,51 @@ ConditionExpression:
     // ------------------------------------------
     // PATCH /inventory/commit (Deduct Stock)
     // ------------------------------------------
-    if (method === "PATCH" && path === "/inventory/commit") {
-      if (!canReserveInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
+    if (method === 'PATCH' && path === '/inventory/commit') {
+      if (!canReserveInventory(userContext)) return createErrorResponse(403, 'Access unauthorized');
 
       const body = parseJsonBody(event);
       const requestedQuantity = normalizeQuantity(body.requestedQuantity);
       const productId = body.productId || body.product_id;
 
-      if (!productId || requestedQuantity <= 0) return createErrorResponse(422, "Invalid parameters constraints mapping");
+      if (!productId || requestedQuantity <= 0)
+        return createErrorResponse(422, 'Invalid parameters constraints mapping');
 
       const now = new Date().toISOString();
 
       try {
-        const result = await docClient.send(new UpdateCommand({
-          TableName: inventoryTable,
-          Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
-          UpdateExpression: "SET reservedQuantity = reservedQuantity - :req, reservationStatus = :status, updatedAt = :now",
-          ConditionExpression:"attribute_exists(PK) AND reservedQuantity >= :req",
-          ExpressionAttributeValues: {
-            ":req": requestedQuantity,
-            ":status": "COMMITTED",
-            ":now": now
-          },
-          ReturnValues: "ALL_NEW"
-        }));
+        const result = await docClient.send(
+          new UpdateCommand({
+            TableName: inventoryTable,
+            Key: { PK: `INVENTORY#${productId}`, SK: 'STOCK' },
+            UpdateExpression:
+              'SET reservedQuantity = reservedQuantity - :req, reservationStatus = :status, updatedAt = :now',
+            ConditionExpression: 'attribute_exists(PK) AND reservedQuantity >= :req',
+            ExpressionAttributeValues: {
+              ':req': requestedQuantity,
+              ':status': 'COMMITTED',
+              ':now': now,
+            },
+            ReturnValues: 'ALL_NEW',
+          })
+        );
 
-        await appendAuditRecord(docClient, inventoryTable, productId, "COMMIT", requestedQuantity, userContext.userId, body.reason);
+        await appendAuditRecord(
+          docClient,
+          inventoryTable,
+          productId,
+          'COMMIT',
+          requestedQuantity,
+          userContext.userId,
+          body.reason
+        );
         return buildResponse(200, buildInventoryResponse(result.Attributes));
       } catch (err) {
-        if (err.name === "ConditionalCheckFailedException") {
-          return createErrorResponse(409, "Commit balance error: Target stock reservation parameters missing or insufficient");
+        if (err.name === 'ConditionalCheckFailedException') {
+          return createErrorResponse(
+            409,
+            'Commit balance error: Target stock reservation parameters missing or insufficient'
+          );
         }
         throw err;
       }
@@ -451,24 +465,26 @@ ConditionExpression:
     // ------------------------------------------
     // DELETE /inventory/{productId} (Soft-Delete)
     // ------------------------------------------
-    if (method === "DELETE" && path.startsWith("/inventory/")) {
+    if (method === 'DELETE' && path.startsWith('/inventory/')) {
       const productId = getPathParam(event, 1);
-      if (!productId) return createErrorResponse(400, "Product specification missing");
-      if (!canManageInventory(userContext)) return createErrorResponse(403, "Access unauthorized");
+      if (!productId) return createErrorResponse(400, 'Product specification missing');
+      if (!canManageInventory(userContext)) return createErrorResponse(403, 'Access unauthorized');
 
-      await docClient.send(new UpdateCommand({
-        TableName: inventoryTable,
-        Key: { PK: `INVENTORY#${productId}`, SK: "STOCK" },
-        UpdateExpression: "SET isDeleted = :t, deletedAt = :now, deletedBy = :uid, updatedAt = :now",
-        ExpressionAttributeValues: { ":t": true, ":now": new Date().toISOString(), ":uid": userContext.userId }
-      }));
+      await docClient.send(
+        new UpdateCommand({
+          TableName: inventoryTable,
+          Key: { PK: `INVENTORY#${productId}`, SK: 'STOCK' },
+          UpdateExpression: 'SET isDeleted = :t, deletedAt = :now, deletedBy = :uid, updatedAt = :now',
+          ExpressionAttributeValues: { ':t': true, ':now': new Date().toISOString(), ':uid': userContext.userId },
+        })
+      );
 
-      return buildResponse(200, { message: "Inventory stock profile soft-deleted successfully" });
+      return buildResponse(200, { message: 'Inventory stock profile soft-deleted successfully' });
     }
 
-    return createErrorResponse(404, "Routing match point unresolvable");
+    return createErrorResponse(404, 'Routing match point unresolvable');
   } catch (error) {
-    console.error("[Inventory Service Error]", error);
-    return createErrorResponse(500, "Downstream serverless inventory execution fault", error.message);
+    console.error('[Inventory Service Error]', error);
+    return createErrorResponse(500, 'Downstream serverless inventory execution fault', error.message);
   }
 };

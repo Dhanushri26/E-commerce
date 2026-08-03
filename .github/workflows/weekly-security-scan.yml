@@ -1,0 +1,69 @@
+name: Weekly Security Scan
+
+on:
+  schedule:
+    - cron: '0 2 * * 1' # Runs every Monday at 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  weekly-audit:
+    name: Comprehensive Weekly Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Gitleaks Secret Detection
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Run Snyk Vulnerability Assessment
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+        continue-on-error: true
+
+      - name: Run Checkov IaC Security Audit (IaC Files Only)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          soft_fail: true
+
+      - name: Run Trivy File System Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
+
+      - name: Generate Updated SBOM Artifact
+        uses: anchore/sbom-action@v0
+        with:
+          format: 'spdx-json'
+          output-file: 'weekly-sbom.spdx.json'
+
+      - name: Upload Weekly Security Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-security-report
+          path: |
+            weekly-sbom.spdx.json
+          retention-days: 30

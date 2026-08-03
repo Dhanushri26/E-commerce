@@ -1,20 +1,11 @@
-import { useState, useEffect } from 'react'
-import { Link, NavLink } from 'react-router-dom'
-import {
-  Heart,
-  ShoppingBag,
-  UserRound,
-  Menu,
-  X,
-  ChevronDown,
-  Bell,
-  Package,
-} from 'lucide-react'
-import { useAppContext } from '../context/AppContext'
-import { SearchBar } from './SearchBar'
-import { getProducts, normalizeProduct } from '../api/products'
-import { BRAND, CATEGORIES } from '../constants/brand'
-import { cn } from '../lib/utils'
+import { useState, useEffect } from 'react';
+import { Link, NavLink } from 'react-router-dom';
+import { Heart, ShoppingBag, UserRound, Menu, X, ChevronDown, Bell, Package } from 'lucide-react';
+import { useAppContext } from '../context/AppContext';
+import { SearchBar } from './SearchBar';
+import { getProducts, normalizeProduct } from '../api/products';
+import { BRAND, CATEGORIES } from '../constants/brand';
+import { cn } from '../lib/utils';
 
 const navLinks = [
   { label: 'Home', to: '/' },
@@ -22,24 +13,24 @@ const navLinks = [
   { label: 'Deals', to: '/offers' },
   { label: 'New Arrivals', to: '/new-arrivals' },
   { label: 'About', to: '/about' },
-]
+];
 
 export function Navbar() {
-  const { cart, wishlist, user, toast } = useAppContext()
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [categoriesOpen, setCategoriesOpen] = useState(false)
-  const [products, setProducts] = useState([])
+  const { cart, wishlist, user, toast } = useAppContext();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [products, setProducts] = useState([]);
 
-  const cartCount = cart.reduce((sum, item) => sum + (item.quantity ?? 1), 0)
+  const cartCount = cart.reduce((sum, item) => sum + (item.quantity ?? 1), 0);
 
   useEffect(() => {
     getProducts()
       .then((data) => {
-        const items = (data.items || []).map(normalizeProduct)
-        setProducts(items)
+        const items = (data.items || []).map(normalizeProduct);
+        setProducts(items);
       })
-      .catch(() => {})
-  }, [])
+      .catch(() => {});
+  }, []);
 
   return (
     <>
@@ -52,10 +43,7 @@ export function Navbar() {
         <div className="mx-auto max-w-7xl px-4 py-3 lg:px-8">
           <div className="flex items-center gap-4 lg:gap-8">
             {/* Logo */}
-            <Link
-              to="/"
-              className="shrink-0 text-xl font-bold tracking-tight text-slate-900"
-            >
+            <Link to="/" className="shrink-0 text-xl font-bold tracking-tight text-slate-900">
               <span className="text-indigo-600">Shop</span>Sphere
             </Link>
 
@@ -66,17 +54,11 @@ export function Navbar() {
                 className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 Categories
-                <ChevronDown
-                  size={16}
-                  className={cn('transition-transform', categoriesOpen && 'rotate-180')}
-                />
+                <ChevronDown size={16} className={cn('transition-transform', categoriesOpen && 'rotate-180')} />
               </button>
               {categoriesOpen && (
                 <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setCategoriesOpen(false)}
-                  />
+                  <div className="fixed inset-0 z-10" onClick={() => setCategoriesOpen(false)} />
                   <div className="absolute left-0 top-full z-20 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
                     {CATEGORIES.map((cat) => (
                       <Link
@@ -98,11 +80,7 @@ export function Navbar() {
             </div>
 
             {/* Search - desktop */}
-            <SearchBar
-              products={products}
-              className="hidden flex-1 lg:block"
-              onNavigate={() => setMobileOpen(false)}
-            />
+            <SearchBar products={products} className="hidden flex-1 lg:block" onNavigate={() => setMobileOpen(false)} />
 
             {/* Actions */}
             <div className="ml-auto flex items-center gap-1 sm:gap-2">
@@ -120,10 +98,7 @@ export function Navbar() {
               >
                 <Bell size={20} />
               </button>
-              <Link
-                to="/wishlist"
-                className="relative rounded-xl p-2.5 text-slate-600 transition hover:bg-slate-100"
-              >
+              <Link to="/wishlist" className="relative rounded-xl p-2.5 text-slate-600 transition hover:bg-slate-100">
                 <Heart size={20} />
                 {wishlist.length > 0 && (
                   <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
@@ -131,10 +106,7 @@ export function Navbar() {
                   </span>
                 )}
               </Link>
-              <Link
-                to="/cart"
-                className="relative rounded-xl p-2.5 text-slate-600 transition hover:bg-slate-100"
-              >
+              <Link to="/cart" className="relative rounded-xl p-2.5 text-slate-600 transition hover:bg-slate-100">
                 <ShoppingBag size={20} />
                 {cartCount > 0 && (
                   <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white">
@@ -205,9 +177,7 @@ export function Navbar() {
               ))}
             </nav>
             <div className="mt-4 border-t border-slate-100 pt-4">
-              <p className="px-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Categories
-              </p>
+              <p className="px-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Categories</p>
               <div className="mt-2 grid grid-cols-2 gap-1">
                 {CATEGORIES.map((cat) => (
                   <Link
@@ -221,11 +191,7 @@ export function Navbar() {
                 ))}
               </div>
             </div>
-            {user && (
-              <p className="mt-4 px-4 text-xs text-slate-500">
-                Signed in as {user.email}
-              </p>
-            )}
+            {user && <p className="mt-4 px-4 text-xs text-slate-500">Signed in as {user.email}</p>}
           </div>
         )}
       </header>
@@ -244,5 +210,5 @@ export function Navbar() {
         </div>
       )}
     </>
-  )
+  );
 }

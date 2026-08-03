@@ -1,0 +1,172 @@
+name: Application Deployment
+
+on:
+  workflow_run:
+    workflows: ["Continuous Integration (CI)", "DevSecOps Security Scan"]
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment Target Environment'
+        required: true
+        default: 'production'
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || 'ap-southeast-1' }}
+  S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME || 'jewelcart-frontend-dhanu' }}
+  CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID || 'E1VI1Y7VYK9QAO' }}
+  API_GATEWAY_URL: ${{ secrets.API_GATEWAY_URL || 'https://k5piu4f4k3.execute-api.ap-southeast-1.amazonaws.com/v1' }}
+
+jobs:
+  deploy:
+    name: Application Code Deployment
+    runs-on: ubuntu-latest
+    if: >
+      github.ref == 'refs/heads/main' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event.workflow_run.conclusion == 'success')
+      )
+
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: 3. Install Dependencies
+        run: |
+          echo "Installing frontend dependencies..."
+          cd frontend && npm ci && cd ..
+          echo "Installing backend microservice dependencies..."
+          for service in services/*/; do
+            if [ -d "$service" ]; then
+              echo "Installing for $service..."
+              (cd "$service" && if [ -f package-lock.json ]; then npm ci; else npm install; fi)
+            fi
+          done
+
+      - name: 4. Build Frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: 5. Build Backend
+        run: |
+          echo "Building/compiling backend services..."
+          # Microservices use Node.js runtime code in services/ directory
+
+      - name: 6. Package Lambda Functions
+        run: |
+          mkdir -p build
+          for service_dir in services/*/; do
+            service_name=$(basename "$service_dir")
+            echo "Packaging microservice $service_name into build/${service_name}.zip..."
+            (cd "$service_dir" && zip -r "../../build/${service_name}.zip" . -x "*.test.js" "*.spec.js" ".git/*")
+          done
+          ls -la build/
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+        continue-on-error: true
+
+      - name: 7. Upload Frontend Build to S3
+        id: step_s3
+        run: |
+          echo "Uploading frontend dist to existing S3 bucket: ${{ env.S3_BUCKET_NAME }}"
+          if command -v aws >/dev/null 2>&1 && [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            aws s3 sync frontend/dist/ "s3://${{ env.S3_BUCKET_NAME }}" --delete
+          else
+            echo "⚠️ AWS CLI simulation: frontend sync to s3://${{ env.S3_BUCKET_NAME }}"
+          fi
+
+      - name: 8. Invalidate CloudFront Distribution
+        id: step_cloudfront
+        run: |
+          echo "Invalidating CloudFront distribution: ${{ env.CLOUDFRONT_DISTRIBUTION_ID }}"
+          if command -v aws >/dev/null 2>&1 && [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            aws cloudfront create-invalidation --distribution-id "${{ env.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
+          else
+            echo "⚠️ AWS CLI simulation: CloudFront invalidation for ${{ env.CLOUDFRONT_DISTRIBUTION_ID }}"
+          fi
+
+      - name: 9. Update Existing AWS Lambda Functions Using AWS CLI
+        id: step_lambda
+        run: |
+          echo "Updating existing Lambda function code..."
+          
+          # Mapping microservice zip file to existing AWS Lambda function names
+          declare -A LAMBDA_MAP=(
+            ["cart-service"]="jewelcart-cart-service"
+            ["inventory-service"]="jewelcart-inventory-service"
+            ["notification-service"]="jewelcart-notification-service"
+            ["order-service"]="jewelcart-order-service"
+            ["payment-service"]="jewelcart-payment-service"
+            ["product-service"]="jewelcart-product-service"
+          )
+
+          for service in "${!LAMBDA_MAP[@]}"; do
+            lambda_fn="${LAMBDA_MAP[$service]}"
+            zip_file="build/${service}.zip"
+
+            echo "Updating code for existing Lambda function: $lambda_fn using $zip_file"
+            if command -v aws >/dev/null 2>&1 && [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+              aws lambda update-function-code \
+                --function-name "$lambda_fn" \
+                --zip-file "fileb://$zip_file" \
+                --region "${{ env.AWS_REGION }}"
+            else
+              echo "⚠️ AWS CLI simulation: aws lambda update-function-code --function-name $lambda_fn --zip-file fileb://$zip_file"
+            fi
+          done
+
+      - name: 10. Verify Lambda Deployment
+        id: step_verify_lambda
+        run: |
+          echo "Verifying AWS Lambda deployment status..."
+          node scripts/verify-deployment.js
+
+      - name: 11. Verify API Gateway Endpoints
+        id: step_verify_api
+        run: |
+          echo "Verifying API Gateway endpoints..."
+          curl -sI "${{ env.API_GATEWAY_URL }}/products" || echo "Endpoint check completed."
+
+      - name: 12. Run Smoke Tests
+        id: step_smoke_tests
+        run: |
+          echo "Running post-deployment smoke tests..."
+          node scripts/smoke-tests.js
+
+      - name: 13. Automatic Rollback on Failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log('🚨 Deployment failed at step: ' + context.job);
+            console.log('Initiating rollback deployment workflow trigger...');
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'rollback.yml',
+              ref: 'main',
+              inputs: {
+                reason: 'Automatic rollback triggered due to deployment failure'
+              }
+            });

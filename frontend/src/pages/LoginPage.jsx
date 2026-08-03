@@ -1,24 +1,24 @@
-import { useState } from "react";
-import { signIn, confirmSignIn, fetchAuthSession } from "aws-amplify/auth";
-import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, ArrowRight, Lock, Mail, ShieldCheck, ShoppingBag } from "lucide-react";
+import { useState } from 'react';
+import { signIn, confirmSignIn, fetchAuthSession } from 'aws-amplify/auth';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2, ArrowRight, Lock, Mail, ShieldCheck, ShoppingBag } from 'lucide-react';
 
 export default function LoginPage({ onLogin }) {
-  const [step, setStep] = useState("LOGIN"); // "LOGIN" | "NEW_PASSWORD"
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
+  const [step, setStep] = useState('LOGIN'); // "LOGIN" | "NEW_PASSWORD"
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   async function handleLogin(e) {
     if (e) e.preventDefault();
     if (!email || !password) {
-      setError("Please enter both email and password.");
+      setError('Please enter both email and password.');
       return;
     }
     setLoading(true);
-    setError("");
+    setError('');
     try {
       const result = await signIn({ username: email, password });
       if (result.isSignedIn) {
@@ -26,17 +26,17 @@ export default function LoginPage({ onLogin }) {
         onLogin();
         return;
       }
-      if (result.nextStep?.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
-        setStep("NEW_PASSWORD");
+      if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+        setStep('NEW_PASSWORD');
         return;
       }
     } catch (err) {
-      if (err.name === "UserAlreadyAuthenticatedException") {
+      if (err.name === 'UserAlreadyAuthenticatedException') {
         await fetchAuthSession();
         onLogin();
         return;
       }
-      setError(err.message || "Invalid credentials. Please try again.");
+      setError(err.message || 'Invalid credentials. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -45,11 +45,11 @@ export default function LoginPage({ onLogin }) {
   async function handleNewPassword(e) {
     if (e) e.preventDefault();
     if (!newPassword) {
-      setError("Please enter a new password.");
+      setError('Please enter a new password.');
       return;
     }
     setLoading(true);
-    setError("");
+    setError('');
     try {
       const result = await confirmSignIn({ challengeResponse: newPassword });
       if (result.isSignedIn || !result.nextStep) {
@@ -57,7 +57,7 @@ export default function LoginPage({ onLogin }) {
         onLogin();
       }
     } catch (err) {
-      setError(err.message || "Failed to set new password. Please try again.");
+      setError(err.message || 'Failed to set new password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -115,12 +115,12 @@ export default function LoginPage({ onLogin }) {
 
           <div className="mb-8">
             <h2 className="text-3xl font-bold tracking-tight text-slate-900">
-              {step === "LOGIN" ? "Welcome back" : "Set new password"}
+              {step === 'LOGIN' ? 'Welcome back' : 'Set new password'}
             </h2>
             <p className="mt-2 text-slate-500">
-              {step === "LOGIN"
-                ? "Sign in to your account to continue shopping."
-                : "For your security, please create a new password."}
+              {step === 'LOGIN'
+                ? 'Sign in to your account to continue shopping.'
+                : 'For your security, please create a new password.'}
             </p>
           </div>
 
@@ -128,19 +128,17 @@ export default function LoginPage({ onLogin }) {
             {error && (
               <motion.div
                 initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-                animate={{ opacity: 1, height: "auto", marginBottom: 20 }}
+                animate={{ opacity: 1, height: 'auto', marginBottom: 20 }}
                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                 className="overflow-hidden"
               >
-                <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
-                  {error}
-                </div>
+                <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          <form onSubmit={step === "LOGIN" ? handleLogin : handleNewPassword} className="space-y-4">
-            {step === "LOGIN" ? (
+          <form onSubmit={step === 'LOGIN' ? handleLogin : handleNewPassword} className="space-y-4">
+            {step === 'LOGIN' ? (
               <motion.div
                 key="login-fields"
                 initial={{ opacity: 0, x: -16 }}
@@ -204,7 +202,7 @@ export default function LoginPage({ onLogin }) {
                 <Loader2 className="animate-spin" size={18} />
               ) : (
                 <>
-                  {step === "LOGIN" ? "Sign In" : "Set Password"}
+                  {step === 'LOGIN' ? 'Sign In' : 'Set Password'}
                   <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
                 </>
               )}

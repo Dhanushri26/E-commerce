@@ -1,24 +1,22 @@
-import { Link } from 'react-router-dom'
-import { Minus, Plus, Trash2, RefreshCw, ShoppingBag, ArrowRight, Tag } from 'lucide-react'
-import { useAppContext } from '../context/AppContext'
-import { useState } from 'react'
+import { Link } from 'react-router-dom';
+import { Minus, Plus, Trash2, RefreshCw, ShoppingBag, ArrowRight, Tag } from 'lucide-react';
+import { useAppContext } from '../context/AppContext';
+import { useState } from 'react';
 
 export function CartPage() {
-  const { cart, cartLoading, updateQuantity, removeFromCart, clearCartItems, loadCart } =
-    useAppContext()
-  const [coupon, setCoupon] = useState('')
+  const { cart, cartLoading, updateQuantity, removeFromCart, clearCartItems, loadCart } = useAppContext();
+  const [coupon, setCoupon] = useState('');
 
   // Cart item identifier: Lambda returns productId (not id)
-  const getKey = (item) => item.productId ?? item.SK ?? item.id
+  const getKey = (item) => item.productId ?? item.SK ?? item.id;
 
   const subtotal = cart.reduce(
-    (sum, item) =>
-      sum + Number(item.unitPrice ?? item.price ?? 0) * Number(item.quantity ?? 1),
+    (sum, item) => sum + Number(item.unitPrice ?? item.price ?? 0) * Number(item.quantity ?? 1),
     0
-  )
-  const shipping = subtotal >= 1500 ? 0 : 99
-  const tax = subtotal * 0.08
-  const total = subtotal + shipping + tax
+  );
+  const shipping = subtotal >= 1500 ? 0 : 99;
+  const tax = subtotal * 0.08;
+  const total = subtotal + shipping + tax;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 lg:px-8 page-enter">
@@ -40,7 +38,10 @@ export function CartPage() {
             <RefreshCw size={13} className={cartLoading ? 'animate-spin' : ''} />
             Refresh
           </button>
-          <Link to="/products" className="hidden text-sm font-semibold text-indigo-600 hover:text-indigo-700 transition sm:block">
+          <Link
+            to="/products"
+            className="hidden text-sm font-semibold text-indigo-600 hover:text-indigo-700 transition sm:block"
+          >
             Continue Shopping
           </Link>
         </div>
@@ -84,9 +85,9 @@ export function CartPage() {
 
             <div className="space-y-3">
               {cart.map((item) => {
-                const key = getKey(item)
-                const unitPrice = Number(item.unitPrice ?? item.price ?? 0)
-                const lineTotal = unitPrice * Number(item.quantity ?? 1)
+                const key = getKey(item);
+                const unitPrice = Number(item.unitPrice ?? item.price ?? 0);
+                const lineTotal = unitPrice * Number(item.quantity ?? 1);
 
                 return (
                   <div
@@ -97,11 +98,7 @@ export function CartPage() {
                     {/* Image */}
                     <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl bg-white border border-slate-200">
                       {item.image ? (
-                        <img
-                          src={item.image}
-                          alt={item.productTitle}
-                          className="h-full w-full object-cover"
-                        />
+                        <img src={item.image} alt={item.productTitle} className="h-full w-full object-cover" />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-slate-300">
                           <ShoppingBag size={22} />
@@ -114,9 +111,7 @@ export function CartPage() {
                       <h3 className="font-semibold text-slate-900 line-clamp-1">
                         {item.productTitle ?? item.name ?? 'Product'}
                       </h3>
-                      <p className="mt-0.5 text-sm text-slate-400">
-                        ₹{unitPrice.toLocaleString('en-IN')} each
-                      </p>
+                      <p className="mt-0.5 text-sm text-slate-400">₹{unitPrice.toLocaleString('en-IN')} each</p>
                       {/* Qty controls */}
                       <div className="mt-3 flex items-center gap-2">
                         <button
@@ -141,9 +136,7 @@ export function CartPage() {
 
                     {/* Price + Remove */}
                     <div className="flex items-center justify-between sm:flex-col sm:items-end sm:gap-3">
-                      <p className="font-bold text-slate-900">
-                        ₹{lineTotal.toLocaleString('en-IN')}
-                      </p>
+                      <p className="font-bold text-slate-900">₹{lineTotal.toLocaleString('en-IN')}</p>
                       <button
                         id={`cart-remove-${key}`}
                         onClick={() => removeFromCart(key)}
@@ -154,7 +147,7 @@ export function CartPage() {
                       </button>
                     </div>
                   </div>
-                )
+                );
               })}
             </div>
 
@@ -168,7 +161,10 @@ export function CartPage() {
                 >
                   Clear all items
                 </button>
-                <Link to="/products" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition sm:hidden">
+                <Link
+                  to="/products"
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition sm:hidden"
+                >
                   Continue Shopping
                 </Link>
               </div>
@@ -232,12 +228,10 @@ export function CartPage() {
               Proceed to Checkout <ArrowRight size={16} />
             </Link>
 
-            <p className="mt-3 text-center text-xs text-slate-400">
-              Secured by SSL · Payments encrypted
-            </p>
+            <p className="mt-3 text-center text-xs text-slate-400">Secured by SSL · Payments encrypted</p>
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }

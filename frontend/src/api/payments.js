@@ -1,4 +1,4 @@
-import api from "./axios";
+import api from './axios';
 
 // ──────────────────────────────────────────────────────────────
 // PAYMENT SERVICE  →  /payments
@@ -11,7 +11,7 @@ import api from "./axios";
  * Response: { payments: Payment[] }
  */
 export const getPayments = async () => {
-  const response = await api.get("/payments");
+  const response = await api.get('/payments');
   return response.data;
 };
 
@@ -21,7 +21,7 @@ export const getPayments = async () => {
  * Response: { paymentId, orderId, amount, currency, paymentStatus }
  */
 export const createPayment = async (data) => {
-  const response = await api.post("/payments", data);
+  const response = await api.post('/payments', data);
   return response.data;
 };
 
@@ -31,7 +31,7 @@ export const createPayment = async (data) => {
  * Response: { paymentId, orderId, amount, currency, paymentStatus, clientSecret }
  */
 export const createPaymentIntent = async (data) => {
-  const response = await api.post("/payments/intent", data);
+  const response = await api.post('/payments/intent', data);
   return response.data;
 };
 
@@ -41,7 +41,7 @@ export const createPaymentIntent = async (data) => {
  * Response: { orderId, paymentStatus }
  */
 export const verifyPayment = async (data) => {
-  const response = await api.post("/payments/verify", data);
+  const response = await api.post('/payments/verify', data);
   return response.data;
 };
 
@@ -50,7 +50,7 @@ export const verifyPayment = async (data) => {
  * @param {object} data - { paymentId }
  */
 export const capturePayment = async (data) => {
-  const response = await api.post("/payments/capture", data);
+  const response = await api.post('/payments/capture', data);
   return response.data;
 };
 
@@ -59,7 +59,7 @@ export const capturePayment = async (data) => {
  * @param {object} data - { paymentId, refundAmount }
  */
 export const refundPayment = async (data) => {
-  const response = await api.post("/payments/refund", data);
+  const response = await api.post('/payments/refund', data);
   return response.data;
 };
 
@@ -68,7 +68,7 @@ export const refundPayment = async (data) => {
  * @param {object} data - { paymentId }
  */
 export const cancelPayment = async (data) => {
-  const response = await api.post("/payments/cancel", data);
+  const response = await api.post('/payments/cancel', data);
   return response.data;
 };
 
@@ -77,13 +77,13 @@ export const cancelPayment = async (data) => {
  * @param {object} data - { orderId, creditSafetyMargin? }
  */
 export const verifyPurchaseOrder = async (data) => {
-  const response = await api.post("/payments/po-verify", data);
+  const response = await api.post('/payments/po-verify', data);
   return response.data;
 };
 
 /**
  * Update payment metadata and status.
- * @param {string} paymentId 
+ * @param {string} paymentId
  * @param {object} data - e.g. { paymentStatus: 'PAID' }
  */
 export const updatePayment = async (paymentId, data) => {

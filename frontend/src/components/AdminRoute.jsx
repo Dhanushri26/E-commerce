@@ -1,5 +1,5 @@
-import { Navigate } from "react-router-dom";
-import { useAppContext } from "../context/AppContext";
+import { Navigate } from 'react-router-dom';
+import { useAppContext } from '../context/AppContext';
 
 export default function AdminRoute({ children }) {
   const { user } = useAppContext();
@@ -10,7 +10,7 @@ export default function AdminRoute({ children }) {
   }
 
   // Only Admin can continue
-  if (user.role !== "Admin") {
+  if (user.role !== 'Admin') {
     return <Navigate to="/" replace />;
   }
 

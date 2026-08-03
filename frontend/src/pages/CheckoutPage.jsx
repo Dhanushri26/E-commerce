@@ -1,11 +1,11 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { CheckCircle2, Loader2, ShieldCheck, LockKeyhole, Package } from "lucide-react";
-import { useAppContext } from "../context/AppContext";
-import { createPaymentIntent, updatePayment } from "../api/payments";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, Loader2, ShieldCheck, LockKeyhole, Package } from 'lucide-react';
+import { useAppContext } from '../context/AppContext';
+import { createPaymentIntent, updatePayment } from '../api/payments';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const STEPS = ["Shipping", "Billing", "Review", "Payment", "Confirmation"];
+const STEPS = ['Shipping', 'Billing', 'Review', 'Payment', 'Confirmation'];
 
 export function CheckoutPage() {
   const navigate = useNavigate();
@@ -14,16 +14,16 @@ export function CheckoutPage() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [confirmedOrder, setConfirmedOrder] = useState(null);
 
   // Shipping form state
   const [shipping, setShipping] = useState({
-    fullName: user?.name || "",
-    phone: "",
-    address: "",
-    city: "",
-    pincode: "",
+    fullName: user?.name || '',
+    phone: '',
+    address: '',
+    city: '',
+    pincode: '',
   });
 
   // ── Cart totals ──
@@ -42,12 +42,12 @@ export function CheckoutPage() {
   // ── Place order + create payment intent ──
   const handlePlaceOrder = async () => {
     if (cart.length === 0) {
-      setError("Your cart is empty. Add items before placing an order.");
+      setError('Your cart is empty. Add items before placing an order.');
       return;
     }
     setLoading(true);
     setProcessingPayment(true);
-    setError("");
+    setError('');
 
     try {
       // 1) Create order from current cart (Lambda reads cart from DynamoDB)
@@ -65,19 +65,16 @@ export function CheckoutPage() {
 
       // 3) Mark payment as PAID in backend
       await updatePayment(paymentId, {
-        paymentStatus: "PAID",
+        paymentStatus: 'PAID',
         transactionReference: `INTERNAL-TXN-${Date.now()}`,
       });
 
-      order.orderStatus = "CONFIRMED";
+      order.orderStatus = 'CONFIRMED';
       setConfirmedOrder(order);
       setStep(5);
     } catch (err) {
-      console.error("[Checkout] Order failed:", err);
-      setError(
-        err.response?.data?.message ||
-          "Something went wrong during payment processing. Please try again."
-      );
+      console.error('[Checkout] Order failed:', err);
+      setError(err.response?.data?.message || 'Something went wrong during payment processing. Please try again.');
     } finally {
       setLoading(false);
       setProcessingPayment(false);
@@ -96,15 +93,13 @@ export function CheckoutPage() {
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ type: "spring", bounce: 0.5 }}
+            transition={{ type: 'spring', bounce: 0.5 }}
             className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50"
           >
             <CheckCircle2 className="text-emerald-500" size={48} strokeWidth={1.5} />
           </motion.div>
           <h1 className="mt-6 text-2xl font-bold text-slate-900">Order Confirmed!</h1>
-          <p className="mt-2 text-slate-500">
-            Thank you for your purchase. Your items will be on their way soon.
-          </p>
+          <p className="mt-2 text-slate-500">Thank you for your purchase. Your items will be on their way soon.</p>
 
           <div className="mt-8 rounded-xl bg-slate-50 p-5 text-left text-sm border border-slate-100">
             <div className="flex justify-between border-b border-slate-200 pb-3">
@@ -114,27 +109,27 @@ export function CheckoutPage() {
             <div className="flex justify-between border-b border-slate-200 py-3">
               <span className="font-semibold text-slate-600">Status</span>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-                {confirmedOrder.orderStatus?.replace(/_/g, " ")}
+                {confirmedOrder.orderStatus?.replace(/_/g, ' ')}
               </span>
             </div>
             <div className="flex justify-between pt-3">
               <span className="font-semibold text-slate-600">Total Paid</span>
               <span className="font-bold text-slate-900">
-                ₹{Number(confirmedOrder.totalAmount || total).toLocaleString("en-IN")}
+                ₹{Number(confirmedOrder.totalAmount || total).toLocaleString('en-IN')}
               </span>
             </div>
           </div>
 
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <button
-              onClick={() => navigate("/orders")}
+              onClick={() => navigate('/orders')}
               className="rounded-xl bg-indigo-600 px-7 py-3 text-sm font-semibold text-white hover:bg-indigo-700 transition"
               id="goto-orders-btn"
             >
               View Orders
             </button>
             <button
-              onClick={() => navigate("/products")}
+              onClick={() => navigate('/products')}
               className="rounded-xl border border-slate-200 px-7 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
               id="continue-shopping-btn"
             >
@@ -146,12 +141,12 @@ export function CheckoutPage() {
     );
   }
 
-  const inputCls = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50";
+  const inputCls =
+    'w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50';
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 lg:px-8 page-enter">
       <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:p-8">
-
         {/* Payment Processing Overlay */}
         <AnimatePresence>
           {processingPayment && (
@@ -164,7 +159,7 @@ export function CheckoutPage() {
               <div className="flex flex-col items-center text-center">
                 <motion.div
                   animate={{ rotate: 360 }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
                   className="mb-6 h-14 w-14 rounded-full border-4 border-indigo-100 border-t-indigo-600"
                 />
                 <h3 className="text-xl font-bold text-slate-900">Processing Payment</h3>
@@ -192,17 +187,17 @@ export function CheckoutPage() {
                 <div
                   className={`flex h-8 items-center gap-1.5 rounded-full px-3.5 transition-all duration-300 ${
                     isActive
-                      ? "bg-indigo-600 text-white shadow-sm"
+                      ? 'bg-indigo-600 text-white shadow-sm'
                       : isCompleted
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      : "bg-slate-100 text-slate-400"
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-100 text-slate-400'
                   }`}
                 >
                   {isCompleted && <CheckCircle2 size={13} />}
                   {label}
                 </div>
                 {index < STEPS.length - 1 && (
-                  <div className={`h-px w-4 ${isCompleted ? "bg-emerald-300" : "bg-slate-200"}`} />
+                  <div className={`h-px w-4 ${isCompleted ? 'bg-emerald-300' : 'bg-slate-200'}`} />
                 )}
               </div>
             );
@@ -214,13 +209,11 @@ export function CheckoutPage() {
           {error && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
+              animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden mb-6"
             >
-              <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
-                {error}
-              </div>
+              <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">{error}</div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -336,12 +329,12 @@ export function CheckoutPage() {
                           <Package size={18} className="text-indigo-400 shrink-0" />
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-slate-900 truncate">
-                              {item.productTitle || item.name || "Product"}
+                              {item.productTitle || item.name || 'Product'}
                             </p>
                             <p className="mt-0.5 text-xs text-slate-400">Qty: {item.quantity}</p>
                           </div>
                           <p className="font-bold text-slate-900 shrink-0">
-                            ₹{(Number(item.unitPrice || item.price || 0) * item.quantity).toLocaleString("en-IN")}
+                            ₹{(Number(item.unitPrice || item.price || 0) * item.quantity).toLocaleString('en-IN')}
                           </p>
                         </div>
                       ))
@@ -365,7 +358,12 @@ export function CheckoutPage() {
                   </div>
                   <div className="space-y-3">
                     {[
-                      { id: 'pay-card', label: 'Credit or Debit Card', sub: 'Processed securely', defaultChecked: true },
+                      {
+                        id: 'pay-card',
+                        label: 'Credit or Debit Card',
+                        sub: 'Processed securely',
+                        defaultChecked: true,
+                      },
                       { id: 'pay-bank', label: 'Bank Transfer', sub: 'NEFT / RTGS', defaultChecked: false },
                     ].map((opt) => (
                       <label
@@ -395,7 +393,7 @@ export function CheckoutPage() {
                     {loading ? (
                       <Loader2 size={18} className="animate-spin" />
                     ) : (
-                      <>Confirm & Pay ₹{total.toLocaleString("en-IN")}</>
+                      <>Confirm & Pay ₹{total.toLocaleString('en-IN')}</>
                     )}
                   </button>
                 </motion.div>
@@ -407,7 +405,7 @@ export function CheckoutPage() {
               <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-6">
                 <button
                   onClick={() => setStep((p) => Math.max(1, p - 1))}
-                  className={`rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition ${step === 1 ? "invisible" : ""}`}
+                  className={`rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition ${step === 1 ? 'invisible' : ''}`}
                   id="checkout-back-btn"
                 >
                   Go Back
@@ -434,12 +432,12 @@ export function CheckoutPage() {
                   <div key={item.productId || item.SK} className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-800 truncate">
-                        {item.productTitle || item.name || "Product"}
+                        {item.productTitle || item.name || 'Product'}
                       </p>
                       <p className="text-xs text-slate-400">Qty: {item.quantity}</p>
                     </div>
                     <span className="font-semibold text-slate-900 shrink-0">
-                      ₹{(Number(item.unitPrice || item.price || 0) * item.quantity).toLocaleString("en-IN")}
+                      ₹{(Number(item.unitPrice || item.price || 0) * item.quantity).toLocaleString('en-IN')}
                     </span>
                   </div>
                 ))
@@ -449,12 +447,12 @@ export function CheckoutPage() {
             <div className="mt-5 space-y-2.5 border-t border-slate-100 pt-4 text-sm text-slate-600">
               <div className="flex justify-between">
                 <span>Subtotal</span>
-                <span className="font-medium text-slate-800">₹{subtotal.toLocaleString("en-IN")}</span>
+                <span className="font-medium text-slate-800">₹{subtotal.toLocaleString('en-IN')}</span>
               </div>
               <div className="flex justify-between">
                 <span>Shipping</span>
                 <span className={shippingFee === 0 ? 'font-semibold text-emerald-600' : 'font-medium text-slate-800'}>
-                  {shippingFee === 0 ? "Free" : `₹${shippingFee}`}
+                  {shippingFee === 0 ? 'Free' : `₹${shippingFee}`}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -465,7 +463,7 @@ export function CheckoutPage() {
 
             <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 p-4">
               <span className="font-bold text-slate-900">Grand Total</span>
-              <span className="text-lg font-bold text-indigo-600">₹{total.toLocaleString("en-IN")}</span>
+              <span className="text-lg font-bold text-indigo-600">₹{total.toLocaleString('en-IN')}</span>
             </div>
           </div>
         </div>

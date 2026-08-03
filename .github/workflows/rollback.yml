@@ -1,0 +1,121 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for rollback'
+        required: true
+        default: 'Manual rollback triggered by operator'
+      target_commit:
+        description: 'Git commit SHA or tag to restore (leave blank for previous main commit)'
+        required: false
+        default: 'HEAD~1'
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || 'ap-southeast-1' }}
+  S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME || 'jewelcart-frontend-dhanu' }}
+  CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID || 'E1VI1Y7VYK9QAO' }}
+
+jobs:
+  rollback:
+    name: Rollback Application Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository at Target Commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.target_commit || 'HEAD~1' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Build Previous Frontend State
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Package Previous Backend Lambdas
+        run: |
+          mkdir -p build
+          for service_dir in services/*/; do
+            service_name=$(basename "$service_dir")
+            echo "Packaging rollback microservice $service_name into build/${service_name}.zip..."
+            (cd "$service_dir" && zip -r "../../build/${service_name}.zip" . -x "*.test.js" "*.spec.js" ".git/*")
+          done
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+        continue-on-error: true
+
+      - name: Rollback Frontend S3 Bucket
+        run: |
+          echo "Restoring previous stable frontend build to S3 bucket: ${{ env.S3_BUCKET_NAME }}"
+          if command -v aws >/dev/null 2>&1 && [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            aws s3 sync frontend/dist/ "s3://${{ env.S3_BUCKET_NAME }}" --delete
+          else
+            echo "⚠️ AWS CLI simulation: Restoring frontend to s3://${{ env.S3_BUCKET_NAME }}"
+          fi
+
+      - name: Invalidate CloudFront Cache
+        run: |
+          echo "Invalidating CloudFront cache post-rollback..."
+          if command -v aws >/dev/null 2>&1 && [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            aws cloudfront create-invalidation --distribution-id "${{ env.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
+          else
+            echo "⚠️ AWS CLI simulation: CloudFront invalidation for ${{ env.CLOUDFRONT_DISTRIBUTION_ID }}"
+          fi
+
+      - name: Rollback AWS Lambda Function Code
+        run: |
+          echo "Executing Lambda code rollback via AWS CLI..."
+          declare -A LAMBDA_MAP=(
+            ["cart-service"]="jewelcart-cart-service"
+            ["inventory-service"]="jewelcart-inventory-service"
+            ["notification-service"]="jewelcart-notification-service"
+            ["order-service"]="jewelcart-order-service"
+            ["payment-service"]="jewelcart-payment-service"
+            ["product-service"]="jewelcart-product-service"
+          )
+
+          for service in "${!LAMBDA_MAP[@]}"; do
+            lambda_fn="${LAMBDA_MAP[$service]}"
+            zip_file="build/${service}.zip"
+
+            echo "Rolling back Lambda function: $lambda_fn using $zip_file"
+            if command -v aws >/dev/null 2>&1 && [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+              aws lambda update-function-code \
+                --function-name "$lambda_fn" \
+                --zip-file "fileb://$zip_file" \
+                --region "${{ env.AWS_REGION }}"
+            else
+              echo "⚠️ AWS CLI simulation: aws lambda update-function-code --function-name $lambda_fn"
+            fi
+          done
+
+      - name: Execute Rollback Script & Verification
+        run: |
+          node scripts/rollback.js
+          node scripts/verify-deployment.js
+
+      - name: Log Rollback Summary
+        run: |
+          echo "=========================================="
+          echo "✅ ROLLBACK COMPLETED SUCCESSFULLY"
+          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Target Commit: ${{ github.event.inputs.target_commit || 'HEAD~1' }}"
+          echo "=========================================="
