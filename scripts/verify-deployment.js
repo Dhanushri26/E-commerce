@@ -6,12 +6,12 @@ const region = process.env.AWS_REGION || 'ap-southeast-1';
 const apiEndpoint = process.env.API_GATEWAY_URL || 'https://k5piu4f4k3.execute-api.ap-southeast-1.amazonaws.com/v1';
 
 const lambdaFunctions = [
-  'jewelcart-cart-service',
-  'jewelcart-inventory-service',
-  'jewelcart-notification-service',
-  'jewelcart-order-service',
-  'jewelcart-payment-service',
-  'jewelcart-product-service'
+  'JewelCart-cart',
+  'JewelCart-inventory',
+  'jewelcart-notification',
+  'jewelcart-order',
+  'JewelCart-payment',
+  'JewelCart-products'
 ];
 
 console.log(`====================================================`);
