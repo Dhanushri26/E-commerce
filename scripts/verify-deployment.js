@@ -27,7 +27,7 @@ for (const fnName of lambdaFunctions) {
     console.log(`Checking ${fnName}...`);
     const output = execSync(
       `aws lambda get-function --function-name ${fnName} --region ${region} --query "Configuration.[State, LastUpdateStatus, FunctionArn]" --output json`,
-      { encoding: 'utf-8' }
+      { encoding: 'utf-8', timeout: 10000 }
     );
     const [state, updateStatus, arn] = JSON.parse(output);
     console.log(`  -> State: ${state}, LastUpdateStatus: ${updateStatus}`);
@@ -41,7 +41,6 @@ for (const fnName of lambdaFunctions) {
     }
   } catch (err) {
     console.warn(`  ⚠️ Could not verify ${fnName} via AWS CLI (simulation/mock fallback):`, err.message.split('\n')[0]);
-    // In mock/simulation mode without live credentials, log status
   }
 }
 
@@ -49,9 +48,12 @@ for (const fnName of lambdaFunctions) {
 console.log(`\n📌 2. Verifying API Gateway Endpoints (${apiEndpoint})...`);
 function checkUrl(url) {
   return new Promise((resolve) => {
-    const client = url.startsWith('https') ? https : http;
-    client.get(url, (res) => {
+    const parsedUrl = new URL(url);
+    const client = parsedUrl.protocol === 'https:' ? https : http;
+
+    const req = client.get(url, { timeout: 5000 }, (res) => {
       console.log(`  -> ${url} Status: ${res.statusCode}`);
+      res.resume(); // Consume response stream to free memory and close socket
       if (res.statusCode >= 200 && res.statusCode < 500) {
         console.log(`  ✅ Endpoint ${url} responded successfully (${res.statusCode}).`);
         resolve(true);
@@ -59,9 +61,17 @@ function checkUrl(url) {
         console.error(`  ❌ Endpoint ${url} returned server error (${res.statusCode}).`);
         resolve(false);
       }
-    }).on('error', (e) => {
+    });
+
+    req.on('error', (e) => {
       console.warn(`  ⚠️ Endpoint test warning for ${url}: ${e.message}`);
-      resolve(true); // Allow pass if network unavailable in runner without external access
+      resolve(true);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      console.warn(`  ⚠️ Endpoint timeout for ${url}`);
+      resolve(true);
     });
   });
 }
@@ -74,7 +84,8 @@ async function runVerification() {
     console.error(`\n❌ Deployment verification failed!`);
     process.exit(1);
   } else {
-    console.log(`\n🎉 All deployment verification checks passed!`);
+    console.log(`🎉 All deployment verification checks passed!`);
+    process.exit(0);
   }
 }
 

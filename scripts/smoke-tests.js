@@ -2,7 +2,6 @@ import https from 'https';
 import http from 'http';
 
 const apiBaseUrl = process.env.API_GATEWAY_URL || 'https://k5piu4f4k3.execute-api.ap-southeast-1.amazonaws.com/v1';
-const frontendUrl = process.env.FRONTEND_URL || 'https://d123456789.cloudfront.net';
 
 console.log(`====================================================`);
 console.log(`🧪 Running Post-Deployment Smoke Tests`);
@@ -20,14 +19,17 @@ function makeRequest(url, method = 'GET', headers = {}) {
         'User-Agent': 'JewelCart-SmokeTestRunner/1.0',
         ...headers
       },
-      timeout: 10000
+      timeout: 5000
     };
 
     const client = parsedUrl.protocol === 'https:' ? https : http;
     const req = client.request(options, (res) => {
       let body = '';
       res.on('data', chunk => body += chunk);
-      res.on('end', () => resolve({ statusCode: res.statusCode, headers: res.headers, body }));
+      res.on('end', () => {
+        res.resume();
+        resolve({ statusCode: res.statusCode, headers: res.headers, body });
+      });
     });
 
     req.on('error', (err) => reject(err));
@@ -76,6 +78,7 @@ async function runSmokeTests() {
     process.exit(1);
   } else {
     console.log(`🎉 All smoke tests passed successfully!`);
+    process.exit(0);
   }
 }
 
