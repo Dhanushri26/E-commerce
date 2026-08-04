@@ -1,5 +1,3 @@
-We are talking of the same. document applied photo what's a documentimport https from 'https';
-import http from 'http';
 
 const apiBaseUrl = process.env.API_GATEWAY_URL || 'https://k5piu4f4k3.execute-api.ap-southeast-1.amazonaws.com/v1';
 
